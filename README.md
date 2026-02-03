@@ -520,14 +520,13 @@ AgentSandbox/
 │   ├── Endpoints/
 │   │   └── SandboxEndpoints.cs      # API routes
 │   └── Program.cs
-└── tests/
-    └── AgentSandbox.Tests/          # Unit tests
-        ├── VirtualFileSystemTests.cs
-        ├── SandboxShellTests.cs
-        └── ShellExtensions/
-            ├── CurlCommandTests.cs
-            ├── JqCommandTests.cs
-            └── GitCommandTests.cs
+└── AgentSandbox.Tests/              # Unit tests
+    ├── VirtualFileSystemTests.cs
+    ├── SandboxShellTests.cs
+    └── ShellExtensions/
+        ├── CurlCommandTests.cs
+        ├── JqCommandTests.cs
+        └── GitCommandTests.cs
 ```
 
 ## Building
