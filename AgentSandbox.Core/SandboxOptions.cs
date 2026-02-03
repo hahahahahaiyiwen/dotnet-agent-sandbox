@@ -10,11 +10,11 @@ namespace AgentSandbox.Core;
 /// </summary>
 public class SandboxOptions
 {
-    /// <summary>Maximum total size of all files in bytes (default: 256KB).</summary>
-    public long MaxTotalSize { get; set; } = 256 * 1024;
+    /// <summary>Maximum total size of all files in bytes (default: 5MB).</summary>
+    public long MaxTotalSize { get; set; } = 5 * 1024 * 1024;
     
-    /// <summary>Maximum size of a single file in bytes (default: 16KB).</summary>
-    public long MaxFileSize { get; set; } = 16 * 1024;
+    /// <summary>Maximum size of a single file in bytes (default: 100KB).</summary>
+    public long MaxFileSize { get; set; } = 100 * 1024;
     
     /// <summary>Maximum number of files/directories (default: 1000).</summary>
     public int MaxNodeCount { get; set; } = 1000;

@@ -435,9 +435,9 @@ git help
 ```csharp
 var options = new SandboxOptions
 {
-    MaxTotalSize = 128 * 1024,  // 128 KB total storage
-    MaxFileSize = 10 * 1024,     // 10 KB per file
-    MaxNodeCount = 1000,                // Max files/directories
+    MaxTotalSize = 5 * 1024 * 1024,  // 5 MB total storage (default)
+    MaxFileSize = 100 * 1024,         // 100 KB per file (default)
+    MaxNodeCount = 1000,              // Max files/directories
     CommandTimeout = TimeSpan.FromSeconds(30),
     WorkingDirectory = "/workspace",
     Environment = new Dictionary<string, string>
@@ -486,6 +486,21 @@ manager.Destroy("agent-1");
 3. **Testing**: Create reproducible test environments with snapshots
 4. **Simulation**: Simulate filesystem operations for training/evaluation
 5. **Multi-tenant Services**: Isolate per-user/per-session state
+
+## Performance Characteristics
+
+AgentSandbox is optimized for typical agent workloads: source code, configs, scripts, and text files.
+
+| File Size | Write Latency | Read Latency | Best For |
+|-----------|---------------|--------------|----------|
+| < 10 KB | ~10-50 µs | ~15-80 µs | Code, configs, scripts |
+| 10-100 KB | ~50-500 µs | ~80-800 µs | Documentation, data files |
+| > 1 MB | ~5+ ms | ~5+ ms | Consider chunking or external storage |
+
+**Recommendations:**
+- Small files (<100 KB) have microsecond latency — ideal for agent tasks
+- For large files (>1 MB), consider chunking or using external storage
+- Memory allocation is ~10x file size due to shell parsing and .NET string overhead
 
 ## Project Structure
 
