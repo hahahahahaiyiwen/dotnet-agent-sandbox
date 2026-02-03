@@ -21,7 +21,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\AgentSandbox.Core\AgentSandbox.Core.csproj" />
+    <ProjectReference Include="..\..\AgentSandbox.Core\AgentSandbox.Core.csproj" />
   </ItemGroup>
 
 </Project>

@@ -7,19 +7,23 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AgentSandbox.Core", "AgentS
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AgentSandbox.Api", "AgentSandbox.Api\AgentSandbox.Api.csproj", "{940158C5-D0C9-4704-8B10-A2793E7AA487}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AgentSandbox.Tests", "AgentSandbox.Tests\AgentSandbox.Tests.csproj", "{A9964E0E-6962-4171-9C35-1578246E584D}"
-EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AgentSandbox.Extensions", "AgentSandbox.Extensions\AgentSandbox.Extensions.csproj", "{3B11AA4F-006B-4341-B2BA-2C04A05EF26F}"
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "samples", "samples", "{5D20AA90-6969-D8BD-9DCD-8634F4692FDA}"
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "InteractiveSandbox", "InteractiveSandbox", "{3B2AE8FF-1B43-3CC6-F815-D75384C748F7}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "InteractiveSandbox", "samples\InteractiveSandbox\AgentSandbox.Playground.csproj", "{CB559F9D-4445-4493-A04F-43CD58423D09}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AgentSandbox.Playground", "samples\InteractiveSandbox\AgentSandbox.Playground.csproj", "{CB559F9D-4445-4493-A04F-43CD58423D09}"
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "InteractiveAgent", "InteractiveAgent", "{B167B2B4-7782-FCDF-312F-C538526F9A41}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "InteractiveAgent", "samples\InteractiveAgent\AgentSandbox.AgentPlayground.csproj", "{B0EF0F02-D2EC-468A-9EDE-FA0D8AD752ED}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AgentSandbox.AgentPlayground", "samples\InteractiveAgent\AgentSandbox.AgentPlayground.csproj", "{B0EF0F02-D2EC-468A-9EDE-FA0D8AD752ED}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "tests", "tests", "{0AB3BF05-4346-4AA6-1389-037BE0695223}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AgentSandbox.Tests", "tests\AgentSandbox.Tests\AgentSandbox.Tests.csproj", "{AFBB18F0-9C29-46BA-B0FE-CA70F430FE48}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AgentSandbox.Benchmarks", "tests\AgentSandbox.Benchmarks\AgentSandbox.Benchmarks.csproj", "{1CCE1107-30C7-40EC-9102-227673D7E9B4}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -55,18 +59,6 @@ Global
 		{940158C5-D0C9-4704-8B10-A2793E7AA487}.Release|x64.Build.0 = Release|Any CPU
 		{940158C5-D0C9-4704-8B10-A2793E7AA487}.Release|x86.ActiveCfg = Release|Any CPU
 		{940158C5-D0C9-4704-8B10-A2793E7AA487}.Release|x86.Build.0 = Release|Any CPU
-		{A9964E0E-6962-4171-9C35-1578246E584D}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{A9964E0E-6962-4171-9C35-1578246E584D}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{A9964E0E-6962-4171-9C35-1578246E584D}.Debug|x64.ActiveCfg = Debug|Any CPU
-		{A9964E0E-6962-4171-9C35-1578246E584D}.Debug|x64.Build.0 = Debug|Any CPU
-		{A9964E0E-6962-4171-9C35-1578246E584D}.Debug|x86.ActiveCfg = Debug|Any CPU
-		{A9964E0E-6962-4171-9C35-1578246E584D}.Debug|x86.Build.0 = Debug|Any CPU
-		{A9964E0E-6962-4171-9C35-1578246E584D}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{A9964E0E-6962-4171-9C35-1578246E584D}.Release|Any CPU.Build.0 = Release|Any CPU
-		{A9964E0E-6962-4171-9C35-1578246E584D}.Release|x64.ActiveCfg = Release|Any CPU
-		{A9964E0E-6962-4171-9C35-1578246E584D}.Release|x64.Build.0 = Release|Any CPU
-		{A9964E0E-6962-4171-9C35-1578246E584D}.Release|x86.ActiveCfg = Release|Any CPU
-		{A9964E0E-6962-4171-9C35-1578246E584D}.Release|x86.Build.0 = Release|Any CPU
 		{3B11AA4F-006B-4341-B2BA-2C04A05EF26F}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{3B11AA4F-006B-4341-B2BA-2C04A05EF26F}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{3B11AA4F-006B-4341-B2BA-2C04A05EF26F}.Debug|x64.ActiveCfg = Debug|Any CPU
@@ -103,6 +95,30 @@ Global
 		{B0EF0F02-D2EC-468A-9EDE-FA0D8AD752ED}.Release|x64.Build.0 = Release|Any CPU
 		{B0EF0F02-D2EC-468A-9EDE-FA0D8AD752ED}.Release|x86.ActiveCfg = Release|Any CPU
 		{B0EF0F02-D2EC-468A-9EDE-FA0D8AD752ED}.Release|x86.Build.0 = Release|Any CPU
+		{AFBB18F0-9C29-46BA-B0FE-CA70F430FE48}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{AFBB18F0-9C29-46BA-B0FE-CA70F430FE48}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{AFBB18F0-9C29-46BA-B0FE-CA70F430FE48}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{AFBB18F0-9C29-46BA-B0FE-CA70F430FE48}.Debug|x64.Build.0 = Debug|Any CPU
+		{AFBB18F0-9C29-46BA-B0FE-CA70F430FE48}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{AFBB18F0-9C29-46BA-B0FE-CA70F430FE48}.Debug|x86.Build.0 = Debug|Any CPU
+		{AFBB18F0-9C29-46BA-B0FE-CA70F430FE48}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{AFBB18F0-9C29-46BA-B0FE-CA70F430FE48}.Release|Any CPU.Build.0 = Release|Any CPU
+		{AFBB18F0-9C29-46BA-B0FE-CA70F430FE48}.Release|x64.ActiveCfg = Release|Any CPU
+		{AFBB18F0-9C29-46BA-B0FE-CA70F430FE48}.Release|x64.Build.0 = Release|Any CPU
+		{AFBB18F0-9C29-46BA-B0FE-CA70F430FE48}.Release|x86.ActiveCfg = Release|Any CPU
+		{AFBB18F0-9C29-46BA-B0FE-CA70F430FE48}.Release|x86.Build.0 = Release|Any CPU
+		{1CCE1107-30C7-40EC-9102-227673D7E9B4}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{1CCE1107-30C7-40EC-9102-227673D7E9B4}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{1CCE1107-30C7-40EC-9102-227673D7E9B4}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{1CCE1107-30C7-40EC-9102-227673D7E9B4}.Debug|x64.Build.0 = Debug|Any CPU
+		{1CCE1107-30C7-40EC-9102-227673D7E9B4}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{1CCE1107-30C7-40EC-9102-227673D7E9B4}.Debug|x86.Build.0 = Debug|Any CPU
+		{1CCE1107-30C7-40EC-9102-227673D7E9B4}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{1CCE1107-30C7-40EC-9102-227673D7E9B4}.Release|Any CPU.Build.0 = Release|Any CPU
+		{1CCE1107-30C7-40EC-9102-227673D7E9B4}.Release|x64.ActiveCfg = Release|Any CPU
+		{1CCE1107-30C7-40EC-9102-227673D7E9B4}.Release|x64.Build.0 = Release|Any CPU
+		{1CCE1107-30C7-40EC-9102-227673D7E9B4}.Release|x86.ActiveCfg = Release|Any CPU
+		{1CCE1107-30C7-40EC-9102-227673D7E9B4}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -112,5 +128,7 @@ Global
 		{CB559F9D-4445-4493-A04F-43CD58423D09} = {3B2AE8FF-1B43-3CC6-F815-D75384C748F7}
 		{B167B2B4-7782-FCDF-312F-C538526F9A41} = {5D20AA90-6969-D8BD-9DCD-8634F4692FDA}
 		{B0EF0F02-D2EC-468A-9EDE-FA0D8AD752ED} = {B167B2B4-7782-FCDF-312F-C538526F9A41}
+		{AFBB18F0-9C29-46BA-B0FE-CA70F430FE48} = {0AB3BF05-4346-4AA6-1389-037BE0695223}
+		{1CCE1107-30C7-40EC-9102-227673D7E9B4} = {0AB3BF05-4346-4AA6-1389-037BE0695223}
 	EndGlobalSection
 EndGlobal
