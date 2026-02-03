@@ -82,98 +82,44 @@ public class SandboxShell : IShellContext
         if (string.IsNullOrWhiteSpace(commandLine))
             return ShellResult.Ok();
 
-        // Check for multi-line scripts (not supported)
-        var newlineIndex = FindUnquotedNewline(commandLine);
-        if (newlineIndex >= 0)
-        {
-            return ShellResult.Error(
-                "Multi-line scripts are not supported. Workarounds:\n" +
-                "  - Execute commands separately\n" +
-                "  - Save commands in a .sh file and run: sh <script.sh>");
-        }
+        if (!ShellLexer.TryTokenize(commandLine, out List<ShellToken> tokens, out ShellResult tokenizeError))
+            return tokenizeError;
+        if (tokens.Count == 0)
+            return ShellResult.Ok();
 
-        // Check for pipeline operator (not supported)
-        var pipeIndex = FindUnquotedOperator(commandLine, "|");
-        if (pipeIndex >= 0 && (pipeIndex + 1 >= commandLine.Length || commandLine[pipeIndex + 1] != '|'))
-        {
-            return ShellResult.Error(
-                "Pipelines are not supported. Workarounds:\n" +
-                "  - Use file arguments: 'grep pattern file.txt' instead of 'cat file.txt | grep pattern'\n" +
-                "  - Execute commands separately and process output programmatically\n" +
-                "  - Use shell scripts (.sh) to sequence commands");
-        }
-        
-        // Check for command chaining (not supported)
-        var andIndex = FindUnquotedOperator(commandLine, "&&");
-        if (andIndex >= 0)
-        {
-            return ShellResult.Error(
-                "Command chaining (&&) is not supported. Workarounds:\n" +
-                "  - Execute commands separately and check results\n" +
-                "  - Use shell scripts (.sh) to sequence commands");
-        }
-        
-        // Check for background jobs (not supported)
-        var backgroundIndex = FindUnquotedOperator(commandLine, "&");
-        if (backgroundIndex >= 0 && (backgroundIndex + 1 >= commandLine.Length || commandLine[backgroundIndex + 1] != '&'))
-        {
-            return ShellResult.Error(
-                "Background jobs (&) are not supported. Workarounds:\n" +
-                "  - Execute commands sequentially\n" +
-                "  - Use shell scripts (.sh) to sequence commands");
-        }
-        
-        // Check for command substitution (not supported)
-        if (ContainsUnquotedSubstitution(commandLine) || ContainsUnquotedBackticks(commandLine))
-        {
-            return ShellResult.Error(
-                "Command substitution is not supported. Workarounds:\n" +
-                "  - Execute commands separately and pass outputs explicitly\n" +
-                "  - Use shell scripts (.sh) to sequence commands");
-        }
-
-        // Check for input redirection (not supported)
-        var heredocIndex = FindUnquotedOperator(commandLine, "<<");
-        if (heredocIndex >= 0)
-        {
-            return ShellResult.Error(
-                "Heredoc (<<) is not supported. Workarounds:\n" +
-                "  - Write content to a file first, then use file as argument\n" +
-                "  - Use 'echo \"content\" > file.txt' to create input files");
-        }
-        
-        var inputRedirectIndex = FindUnquotedOperator(commandLine, "<");
-        if (inputRedirectIndex >= 0)
-        {
-            return ShellResult.Error(
-                "Input redirection (<) is not supported. Workarounds:\n" +
-                "  - Use file arguments directly: 'cat file.txt' instead of 'cat < file.txt'\n" +
-                "  - Most commands accept file paths as arguments");
-        }
-
-        // Check for output redirection (ignore > inside quotes)
         string? redirectFile = null;
         bool appendMode = false;
-        var redirectIndex = FindUnquotedOperator(commandLine, ">>");
-        if (redirectIndex > 0)
+        var parts = new List<string>();
+        var wasQuoted = new List<bool>();
+
+        for (int i = 0; i < tokens.Count; i++)
         {
-            appendMode = true;
-            redirectFile = commandLine[(redirectIndex + 2)..].Trim().Trim('"', '\'');
-            commandLine = commandLine[..redirectIndex].Trim();
-        }
-        else
-        {
-            redirectIndex = FindUnquotedOperator(commandLine, ">");
-            if (redirectIndex > 0)
+            var token = tokens[i];
+            if (token.Kind == ShellTokenKind.Operator)
             {
-                redirectFile = commandLine[(redirectIndex + 1)..].Trim().Trim('"', '\'');
-                commandLine = commandLine[..redirectIndex].Trim();
+                switch (token.Value)
+                {
+                    case ">>":
+                    case ">":
+                        if (i == 0 || i + 1 >= tokens.Count || tokens[i + 1].Kind != ShellTokenKind.Word)
+                        {
+                            return ShellResult.Error("redirect: missing file operand");
+                        }
+
+                        appendMode = token.Value == ">>";
+                        redirectFile = tokens[i + 1].Value;
+                        i++;
+                        break;
+                }
+
+                continue;
             }
+
+            parts.Add(ExpandVariables(token.Value));
+            wasQuoted.Add(token.WasQuoted);
         }
 
-        // Parse command line
-        var (parts, wasQuoted) = ParseCommandLineWithQuoteInfo(commandLine);
-        if (parts.Length == 0)
+        if (parts.Count == 0)
             return ShellResult.Ok();
 
         var cmd = parts[0];
@@ -432,7 +378,7 @@ public class SandboxShell : IShellContext
         return (parts.ToArray(), wasQuoted.ToArray());
     }
 
-    private static char? GetEscapedChar(char c)
+    internal static char? GetEscapedChar(char c)
     {
         return c switch
         {
