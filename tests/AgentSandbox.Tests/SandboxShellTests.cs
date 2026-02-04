@@ -240,8 +240,110 @@ public class SandboxShellTests
         Assert.Contains("cd", result.Stdout);
         Assert.Contains("ls", result.Stdout);
         Assert.Contains("sh", result.Stdout);
+        Assert.Contains("which", result.Stdout);
+        Assert.Contains("date", result.Stdout);
         Assert.Contains("-h", result.Stdout); // Should mention -h for command help
     }
+
+    #region Which Command Tests
+
+    [Fact]
+    public void Which_FindsBuiltinCommand()
+    {
+        var result = _shell.Execute("which ls");
+
+        Assert.True(result.Success);
+        Assert.Contains("/bin/ls", result.Stdout);
+    }
+
+    [Fact]
+    public void Which_FindsSpecialCommands()
+    {
+        var resultHelp = _shell.Execute("which help");
+        var resultWhich = _shell.Execute("which which");
+        var resultSh = _shell.Execute("which sh");
+
+        Assert.True(resultHelp.Success);
+        Assert.True(resultWhich.Success);
+        Assert.True(resultSh.Success);
+        Assert.Contains("/bin/help", resultHelp.Stdout);
+        Assert.Contains("/bin/which", resultWhich.Stdout);
+        Assert.Contains("/bin/sh", resultSh.Stdout);
+    }
+
+    [Fact]
+    public void Which_ReturnsErrorForUnknownCommand()
+    {
+        var result = _shell.Execute("which nonexistent");
+
+        Assert.False(result.Success);
+        Assert.Equal(1, result.ExitCode);
+        Assert.Contains("command not found", result.Stderr);
+    }
+
+    [Fact]
+    public void Which_RequiresArgument()
+    {
+        var result = _shell.Execute("which");
+
+        Assert.False(result.Success);
+        Assert.Contains("missing argument", result.Stderr);
+    }
+
+    #endregion
+
+    #region Date Command Tests
+
+    [Fact]
+    public void Date_ReturnsCurrentDateTime()
+    {
+        var result = _shell.Execute("date");
+
+        Assert.True(result.Success);
+        Assert.False(string.IsNullOrEmpty(result.Stdout));
+        Assert.Contains("UTC", result.Stdout);
+    }
+
+    [Fact]
+    public void Date_SupportsIsoFormat()
+    {
+        var result = _shell.Execute("date +%F");
+
+        Assert.True(result.Success);
+        // Should be in YYYY-MM-DD format
+        Assert.Matches(@"^\d{4}-\d{2}-\d{2}$", result.Stdout);
+    }
+
+    [Fact]
+    public void Date_SupportsTimeFormat()
+    {
+        var result = _shell.Execute("date +%T");
+
+        Assert.True(result.Success);
+        // Should be in HH:MM:SS format
+        Assert.Matches(@"^\d{2}:\d{2}:\d{2}$", result.Stdout);
+    }
+
+    [Fact]
+    public void Date_SupportsCustomFormat()
+    {
+        var result = _shell.Execute("date +%Y/%m/%d");
+
+        Assert.True(result.Success);
+        Assert.Matches(@"^\d{4}/\d{2}/\d{2}$", result.Stdout);
+    }
+
+    [Fact]
+    public void Date_SupportsUnixTimestamp()
+    {
+        var result = _shell.Execute("date +%s");
+
+        Assert.True(result.Success);
+        Assert.True(long.TryParse(result.Stdout, out var timestamp));
+        Assert.True(timestamp > 0);
+    }
+
+    #endregion
 
     #region Command Help Tests
 
@@ -266,6 +368,8 @@ public class SandboxShellTests
     [InlineData("sh")]
     [InlineData("clear")]
     [InlineData("help")]
+    [InlineData("which")]
+    [InlineData("date")]
     public void BuiltinCommands_SupportHelpFlag(string command)
     {
         var result = _shell.Execute($"{command} -h");
@@ -817,6 +921,135 @@ public class SandboxShellTests
         Assert.True(result.Success);
         Assert.Contains("a.cs:1:Hello World", result.Stdout);
         Assert.Contains("b.cs:1:hello world", result.Stdout);
+    }
+
+    [Fact]
+    public void Grep_FilesOnly_ListsMatchingFiles()
+    {
+        _fs.WriteFile("/a.txt", "hello world");
+        _fs.WriteFile("/b.txt", "goodbye world");
+        _fs.WriteFile("/c.txt", "hello again");
+
+        var result = _shell.Execute("grep -l hello *.txt");
+
+        Assert.True(result.Success);
+        Assert.Contains("a.txt", result.Stdout);
+        Assert.Contains("c.txt", result.Stdout);
+        Assert.DoesNotContain("b.txt", result.Stdout);
+    }
+
+    [Fact]
+    public void Grep_Count_ShowsMatchCount()
+    {
+        _fs.WriteFile("/test.txt", "apple\nbanana\napple pie\ncherry");
+
+        var result = _shell.Execute("grep -c apple /test.txt");
+
+        Assert.True(result.Success);
+        Assert.Equal("2", result.Stdout);
+    }
+
+    [Fact]
+    public void Grep_InvertMatch_ShowsNonMatchingLines()
+    {
+        _fs.WriteFile("/test.txt", "apple\nbanana\ncherry");
+
+        var result = _shell.Execute("grep -v apple /test.txt");
+
+        Assert.True(result.Success);
+        Assert.Contains("banana", result.Stdout);
+        Assert.Contains("cherry", result.Stdout);
+        Assert.DoesNotContain("apple", result.Stdout);
+    }
+
+    [Fact]
+    public void Grep_WordMatch_MatchesWholeWordsOnly()
+    {
+        _fs.WriteFile("/test.txt", "app\napple\napplication");
+
+        var result = _shell.Execute("grep -w app /test.txt");
+
+        Assert.True(result.Success);
+        Assert.Equal("app", result.Stdout);
+    }
+
+    [Fact]
+    public void Grep_OnlyMatching_PrintsMatchedParts()
+    {
+        _fs.WriteFile("/test.txt", "hello world, hello there");
+
+        var result = _shell.Execute("grep -o hello /test.txt");
+
+        Assert.True(result.Success);
+        var lines = result.Stdout.Split('\n', StringSplitOptions.RemoveEmptyEntries);
+        Assert.Equal(2, lines.Length);
+        Assert.All(lines, l => Assert.Equal("hello", l.TrimEnd('\r')));
+    }
+
+    [Fact]
+    public void Grep_MaxCount_StopsAfterNMatches()
+    {
+        _fs.WriteFile("/test.txt", "match1\nmatch2\nmatch3\nmatch4");
+
+        var result = _shell.Execute("grep -m 2 match /test.txt");
+
+        Assert.True(result.Success);
+        var lines = result.Stdout.Split('\n');
+        Assert.Equal(2, lines.Length);
+    }
+
+    [Fact]
+    public void Grep_AfterContext_ShowsLinesAfterMatch()
+    {
+        _fs.WriteFile("/test.txt", "line1\nmatch\nline3\nline4\nline5");
+
+        var result = _shell.Execute("grep -A 2 match /test.txt");
+
+        Assert.True(result.Success);
+        Assert.Contains("match", result.Stdout);
+        Assert.Contains("line3", result.Stdout);
+        Assert.Contains("line4", result.Stdout);
+        Assert.DoesNotContain("line5", result.Stdout);
+    }
+
+    [Fact]
+    public void Grep_BeforeContext_ShowsLinesBeforeMatch()
+    {
+        _fs.WriteFile("/test.txt", "line1\nline2\nmatch\nline4");
+
+        var result = _shell.Execute("grep -B 2 match /test.txt");
+
+        Assert.True(result.Success);
+        Assert.Contains("line1", result.Stdout);
+        Assert.Contains("line2", result.Stdout);
+        Assert.Contains("match", result.Stdout);
+        Assert.DoesNotContain("line4", result.Stdout);
+    }
+
+    [Fact]
+    public void Grep_Context_ShowsLinesAroundMatch()
+    {
+        _fs.WriteFile("/test.txt", "line1\nline2\nmatch\nline4\nline5");
+
+        var result = _shell.Execute("grep -C 1 match /test.txt");
+
+        Assert.True(result.Success);
+        Assert.Contains("line2", result.Stdout);
+        Assert.Contains("match", result.Stdout);
+        Assert.Contains("line4", result.Stdout);
+        Assert.DoesNotContain("line1", result.Stdout);
+        Assert.DoesNotContain("line5", result.Stdout);
+    }
+
+    [Fact]
+    public void Grep_CombinedNewFlags()
+    {
+        _fs.WriteFile("/test.txt", "Hello World\nhello world\nHELLO WORLD");
+
+        var result = _shell.Execute("grep -icv hello /test.txt");
+
+        Assert.True(result.Success);
+        Assert.Equal("0", result.Stdout); // All lines match hello with -i, so inverted count is 0
     }
 
     #endregion

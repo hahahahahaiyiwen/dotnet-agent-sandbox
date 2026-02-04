@@ -34,15 +34,20 @@ public class FindCommand : IShellCommand
         var basePath = context.ResolvePath(startPath);
         var output = new StringBuilder();
         
-        FindRecursive(context, basePath, namePattern, output);
+        // Create cached regex once, outside the recursive loop
+        var regexPattern = "^" + Regex.Escape(namePattern).Replace("\\*", ".*").Replace("\\?", ".") + "$";
+        var regex = context.GetOrCreate(
+            regexPattern,
+            () => new Regex(regexPattern, RegexOptions.Compiled));
+        
+        FindRecursive(context, basePath, namePattern, regex, output);
 
         return ShellResult.Ok(output.ToString().TrimEnd());
     }
 
-    private static void FindRecursive(IShellContext context, string path, string pattern, StringBuilder output)
+    private static void FindRecursive(IShellContext context, string path, string pattern, Regex regex, StringBuilder output)
     {
         var name = FileSystemPath.GetName(path);
-        var regex = new Regex("^" + Regex.Escape(pattern).Replace("\\*", ".*").Replace("\\?", ".") + "$");
         
         if (regex.IsMatch(name) || pattern == "*")
         {
@@ -54,7 +59,7 @@ public class FindCommand : IShellCommand
             foreach (var child in context.FileSystem.ListDirectory(path))
             {
                 var childPath = path == "/" ? "/" + child : path + "/" + child;
-                FindRecursive(context, childPath, pattern, output);
+                FindRecursive(context, childPath, pattern, regex, output);
             }
         }
     }

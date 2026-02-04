@@ -20,6 +20,7 @@ public class SandboxShell : IShellContext
     private readonly Dictionary<string, string> _environment = new();
     private readonly Dictionary<string, IShellCommand> _builtinCommands = new();
     private readonly Dictionary<string, IShellCommand> _extensionCommands = new();
+    private readonly Dictionary<object, object> _sessionCache = new();
 
     #endregion
 
@@ -36,6 +37,17 @@ public class SandboxShell : IShellContext
     IDictionary<string, string> IShellContext.Environment => _environment;
     
     string IShellContext.ResolvePath(string path) => ResolvePath(path);
+
+    T IShellContext.GetOrCreate<T>(object key, Func<T> factory)
+    {
+        if (_sessionCache.TryGetValue(key, out var cached))
+        {
+            return (T)cached;
+        }
+        var value = factory();
+        _sessionCache[key] = value!;
+        return value;
+    }
 
     #endregion
 
@@ -66,6 +78,7 @@ public class SandboxShell : IShellContext
         RegisterBuiltinCommand(new EnvCommand());
         RegisterBuiltinCommand(new ExportCommand());
         RegisterBuiltinCommand(new ClearCommand());
+        RegisterBuiltinCommand(new DateCommand());
     }
 
     #endregion
@@ -171,6 +184,18 @@ public class SandboxShell : IShellContext
             else
             {
                 result = ExecuteHelpCommand();
+            }
+        }
+        // Handle 'which' command specially (needs access to command registries)
+        else if (cmdLower == "which")
+        {
+            if (args.Length > 0 && args[0] == "-h")
+            {
+                result = ShellResult.Ok("which - Locate a command\n\nUsage: which <command>");
+            }
+            else
+            {
+                result = ExecuteWhichCommand(args);
             }
         }
         // Check built-in commands first
@@ -711,14 +736,16 @@ public class SandboxShell : IShellContext
         return absolutePath;
     }
 
-    private static Regex GlobToRegex(string pattern)
+    private Regex GlobToRegex(string pattern)
     {
         var regexPattern = "^" + Regex.Escape(pattern)
             .Replace("\\*", ".*")
             .Replace("\\?", ".")
             .Replace("\\[", "[")
             .Replace("\\]", "]") + "$";
-        return new Regex(regexPattern, RegexOptions.Compiled);
+        return ((IShellContext)this).GetOrCreate(
+            regexPattern,
+            () => new Regex(regexPattern, RegexOptions.Compiled));
     }
 
     #endregion
@@ -755,7 +782,9 @@ public class SandboxShell : IShellContext
         output.AppendLine("  find [path]      Find files");
         output.AppendLine("  env              Show environment variables");
         output.AppendLine("  export VAR=val   Set environment variable");
+        output.AppendLine("  date [+FMT]      Display current date/time");
         output.AppendLine("  sh <script>      Execute shell script");
+        output.AppendLine("  which <cmd>      Locate a command");
         output.AppendLine("  help             Show this help");
         output.AppendLine();
         output.AppendLine("Use '<command> -h' for detailed help on a specific command.");
@@ -773,6 +802,29 @@ public class SandboxShell : IShellContext
         }
 
         return ShellResult.Ok(output.ToString().TrimEnd());
+    }
+
+    private ShellResult ExecuteWhichCommand(string[] args)
+    {
+        if (args.Length == 0)
+            return ShellResult.Error("which: missing argument\nUsage: which <command>");
+
+        var cmdName = args[0].ToLowerInvariant();
+        
+        // Check built-in commands (including special ones: help, which, sh)
+        var specialCommands = new[] { "help", "which", "sh" };
+        if (specialCommands.Contains(cmdName) || _builtinCommands.ContainsKey(cmdName))
+        {
+            return ShellResult.Ok($"/bin/{cmdName}");
+        }
+
+        // Check extension commands
+        if (_extensionCommands.ContainsKey(cmdName))
+        {
+            return ShellResult.Ok($"/usr/bin/{cmdName}");
+        }
+
+        return ShellResult.Error($"which: {args[0]}: command not found", exitCode: 1);
     }
 
     private ShellResult ExecuteShCommand(string[] args)

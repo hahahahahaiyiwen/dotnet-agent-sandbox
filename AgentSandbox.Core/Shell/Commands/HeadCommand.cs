@@ -1,4 +1,5 @@
 using System.Text;
+using AgentSandbox.Core.Shell;
 
 namespace AgentSandbox.Core.Shell.Commands;
 
@@ -18,14 +19,14 @@ public class HeadCommand : IShellCommand
 
     public ShellResult Execute(string[] args, IShellContext context)
     {
-        var lines = 10;
+        var maxLines = 10;
         var paths = new List<string>();
 
         for (int i = 0; i < args.Length; i++)
         {
             if (args[i] == "-n" && i + 1 < args.Length)
             {
-                int.TryParse(args[++i], out lines);
+                int.TryParse(args[++i], out maxLines);
             }
             else if (!args[i].StartsWith('-'))
             {
@@ -41,8 +42,16 @@ public class HeadCommand : IShellCommand
         {
             var path = context.ResolvePath(p);
             var content = context.FileSystem.ReadFile(path, Encoding.UTF8);
-            var fileLines = content.Split('\n').Take(lines);
-            output.AppendLine(string.Join("\n", fileLines));
+            
+            var count = 0;
+            foreach (var (_, line) in content.EnumerateLines())
+            {
+                if (count >= maxLines) break;
+                if (count > 0) output.AppendLine();
+                output.Append(line);
+                count++;
+            }
+            output.AppendLine();
         }
 
         return ShellResult.Ok(output.ToString().TrimEnd());

@@ -164,8 +164,8 @@ using AgentSandbox.Core;
 // In Program.cs or Startup.cs
 builder.Services.AddAgentSandbox(options =>
 {
-    options.MaxTotalSize = 50 * 1024 * 1024; // 50 MB
-    options.MaxFileSize = 5 * 1024 * 1024;   // 5 MB
+    options.MaxTotalSize = 5 * 1024 * 1024; // 5 MB
+    options.MaxFileSize = 100 * 1024;   // 100 KB
 });
 
 // Inject Sandbox into your services
