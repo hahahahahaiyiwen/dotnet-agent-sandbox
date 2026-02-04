@@ -27,8 +27,26 @@ public class WcCommand : IShellCommand
             var content = context.FileSystem.ReadFile(path, Encoding.UTF8);
             var byteCount = Encoding.UTF8.GetByteCount(content);
             
-            var lines = content.Count(c => c == '\n');
-            var words = content.Split(new[] { ' ', '\n', '\t', '\r' }, StringSplitOptions.RemoveEmptyEntries).Length;
+            // Count lines and words without allocating arrays
+            var lines = 0;
+            var words = 0;
+            var inWord = false;
+            
+            foreach (var c in content.AsSpan())
+            {
+                if (c == '\n') lines++;
+                
+                var isWhitespace = c == ' ' || c == '\n' || c == '\t' || c == '\r';
+                if (isWhitespace)
+                {
+                    inWord = false;
+                }
+                else if (!inWord)
+                {
+                    inWord = true;
+                    words++;
+                }
+            }
             
             output.AppendLine($"  {lines,6}  {words,6}  {byteCount,6} {p}");
             totalLines += lines;

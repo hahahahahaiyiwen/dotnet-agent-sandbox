@@ -91,10 +91,17 @@ sandbox.Execute("sh /.sandbox/skills/python-dev/scripts/setup.sh");
 | `cat`, `head`, `tail` | File viewing |
 | `mkdir`, `touch`, `rm`, `cp`, `mv` | File management |
 | `echo`, `grep`, `find`, `wc` | Text processing |
+| `which`, `date` | Utilities |
 | `env`, `export` | Environment variables |
 | `clear` | Clear screen |
 | `sh` | Script execution |
 | `help` | List commands (`<cmd> -h` for details) |
+
+**Grep Features:**
+- Basic: `-i` (case insensitive), `-n` (line numbers), `-r` (recursive)
+- Output: `-l` (files only), `-c` (count), `-o` (only matching)
+- Filtering: `-v` (invert), `-w` (word match), `-m N` (max count)
+- Context: `-A N` (after), `-B N` (before), `-C N` (around)
 
 **Shell Features:**
 - Output redirection: `>` (write) and `>>` (append)
@@ -112,7 +119,7 @@ sandbox.Execute("sh /.sandbox/skills/python-dev/scripts/setup.sh");
 **Common Commands Not Available (examples):**
 - `sed`, `awk`, `sort`, `uniq`, `cut`, `tr`, `xargs`, `tee`
 - `less`, `more`, `diff`, `chmod`, `chown`, `ln`
-- `du`, `df`, `ps`, `kill`, `whoami`, `date`, `uname`, `which`, `whereis`, `man`
+- `du`, `df`, `ps`, `kill`, `whoami`, `uname`, `whereis`, `man`
 
 ## Snapshots
 
