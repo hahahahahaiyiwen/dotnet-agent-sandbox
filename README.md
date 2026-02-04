@@ -347,8 +347,10 @@ curl "http://localhost:5000/api/sandbox/agent-1/ls?path=/workspace"
 | `head` | Show first N lines | `head -n 10 file.txt` |
 | `tail` | Show last N lines | `tail -n 5 file.txt` |
 | `wc` | Count lines/words/bytes | `wc file.txt` |
-| `grep` | Search pattern in files | `grep -i pattern file.txt` |
+| `grep` | Search pattern in files | `grep -rn pattern *.cs` |
 | `find` | Find files | `find /path -name "*.txt"` |
+| `which` | Locate commands | `which curl` |
+| `date` | Display date/time | `date "+%Y-%m-%d"` |
 | `env` | Show environment | `env` |
 | `export` | Set environment variable | `export KEY=value` |
 | `clear` | Clear screen | `clear` |
@@ -372,7 +374,7 @@ curl "http://localhost:5000/api/sandbox/agent-1/ls?path=/workspace"
 **Common Commands Not Available (examples):**
 - `sed`, `awk`, `sort`, `uniq`, `cut`, `tr`, `xargs`, `tee`
 - `less`, `more`, `diff`, `chmod`, `chown`, `ln`
-- `du`, `df`, `ps`, `kill`, `whoami`, `date`, `uname`, `which`, `whereis`, `man`
+- `du`, `df`, `ps`, `kill`, `whoami`, `uname`, `whereis`, `man`
 
 **Shell Script Execution:**
 
