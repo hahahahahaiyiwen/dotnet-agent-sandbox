@@ -66,7 +66,7 @@ var chatClient = new AzureOpenAIClient(new Uri(endpoint), new AzureCliCredential
 AIAgent agent = chatClient.AsAIAgent(
     instructions: "You are a helpful assistant.",
     name: "SandboxAgent",
-    tools: new[] { KernelExtensions.CreateSandboxFunction(sandbox), KernelExtensions.CreateGetSkillFunction(sandbox) })
+    tools: new[] { KernelExtensions.GetBashFunction(sandbox), KernelExtensions.CreateGetSkillFunction(sandbox) })
     .AsBuilder()
     .Build();
 

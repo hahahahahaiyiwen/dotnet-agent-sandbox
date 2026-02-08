@@ -11,11 +11,6 @@ public class SandboxTelemetryOptions
     public bool Enabled { get; set; } = false;
 
     /// <summary>
-    /// Service name for telemetry identification. Default: "AgentSandbox".
-    /// </summary>
-    public string ServiceName { get; set; } = "AgentSandbox";
-
-    /// <summary>
     /// Service instance identifier for distributed systems. 
     /// Default: machine name. Used to distinguish metrics from different instances.
     /// </summary>
