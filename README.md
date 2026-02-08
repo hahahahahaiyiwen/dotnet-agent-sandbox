@@ -18,8 +18,10 @@ This project provides what's missing: **an in-memory sandbox where agents can re
 - **Sandboxed Shell**: Unix-style CLI emulator with 18+ built-in commands
 - **Shell Extensions**: Extensible command system with `curl`, `jq`, `git` and more
 - **Agent Skill Integration**: Easy loading of reusable agent skills into the sandbox filesystem 
+- **File I/O Tools**: Dedicated `read`, `write`, and `patch` tools with line-range support for agent use
 - **Self-Discovery Support**: Enhanced documentation via `help` and `<command> -h` to enable agent's self-discovery
 - **Snapshots**: Save and restore complete sandbox state
+- **Observability**: Built-in telemetry, structured logging, Application Insights, and OpenTelemetry support
 - **Resource Limits**: Configurable max file size, total storage, and node count
 - **Zero Dependencies**: Pure .NET implementation, no external services required
 
@@ -74,7 +76,7 @@ Navigate to `http://localhost:5000/swagger` to explore the API.
 dotnet add package AgentSandbox.Core
 
 # Or install a specific version
-dotnet add package AgentSandbox.Core --version 2.0.0
+dotnet add package AgentSandbox.Core --version 4.0.0
 ```
 
 ```csharp
@@ -97,6 +99,13 @@ else
     Console.WriteLine($"Error: {result.Stderr}");
 }
 
+// Use dedicated File I/O tools (safer, with line-range support)
+var content = sandbox.ReadFile("/workspace/src/app.js");                      // Read entire file
+var lines = sandbox.ReadFile("/workspace/src/app.js", startLine: 0, endLine: 10); // Read specific lines
+
+sandbox.WriteFile("/workspace/data.json", "{\"status\": \"active\"}");        // Create file
+sandbox.ApplyPatch("/workspace/src/app.js", unifiedDiff);                     // Apply unified diff
+
 // Create snapshots for checkpointing
 var snapshot = sandbox.CreateSnapshot();
 // ... make changes ...
@@ -107,14 +116,13 @@ var stats = sandbox.GetStats();
 Console.WriteLine($"Files: {stats.FileCount}, Size: {stats.TotalSize} bytes");
 ```
 
-### Use with Semantic Kernel
+### Use with Microsoft.Extensions.AI and Semantic Kernel
 
-Integrate with Microsoft Semantic Kernel for AI agent tool calling:
+Integrate with Microsoft.Extensions.AI or Semantic Kernel for AI agent tool calling:
 
 ```csharp
-using Microsoft.SemanticKernel;
-using AgentSandbox.Extensions.SemanticKernel;
 using AgentSandbox.Core;
+using AgentSandbox.Extensions;
 using AgentSandbox.Core.Shell.Extensions;
 
 // Configure sandbox with extensions
@@ -128,30 +136,39 @@ var options = new SandboxOptions
     }
 };
 
-// Build kernel with sandbox
-var kernel = Kernel.CreateBuilder()
-    .AddSandboxManager(options)
-    .AddOpenAIChatCompletion("gpt-4", apiKey)
-    .Build();
+var sandbox = new Sandbox(options: options);
 
-// Get the sandbox function for tool calling
-var sandboxFunction = kernel.GetSandboxFunction();
+// Get AI functions for tool calling
+var functions = sandbox.GetSandboxFunctions();
 
-// Add to kernel plugins
-kernel.Plugins.AddFromFunctions("Sandbox", new[] { sandboxFunction });
+// Use with ChatClient (Microsoft.Extensions.AI)
+var client = new ChatClient(model: "gpt-4", apiKey: apiKey);
+var response = await client.CompleteAsync(
+    messages: new[] { new ChatMessage(ChatRole.User, "Create a project structure") },
+    tools: functions.ToList()
+);
 
-// Now the AI agent can execute shell commands
-var result = await kernel.InvokePromptAsync(
-    "Create a project structure with src and tests folders, then create a README.md file");
+// Or use individual functions
+var bashFunction = sandbox.GetBashFunction();       // Execute shell commands
+var readFileFunction = sandbox.GetReadFileFunction();    // Read files with line-range support
+var writeFileFunction = sandbox.GetWriteFileFunction();   // Write/create files
+var patchFunction = sandbox.GetApplyPatchFunction();     // Apply unified diffs
+var skillFunction = sandbox.GetSkillFunction();      // Access loaded skills
 ```
 
-**Available Extension Methods:**
+**Available AI Functions:**
 
-| Method | Description |
-|--------|-------------|
-| `AddSandboxManager(options?)` | Registers SandboxManager as singleton, Sandbox as scoped service |
-| `GetSandboxFunction(options?)` | Creates a KernelFunction for command execution from DI |
-| `CreateSandboxFunction(sandbox)` | Static factory to create AIFunction from a Sandbox instance |
+| Function | Tool Name | Purpose | 
+|----------|-----------|---------|
+| `GetBashFunction()` | `bash_shell` | Execute shell commands |
+| `GetReadFileFunction()` | `read_file` | Read files with optional line-range (e.g., lines 1-100) |
+| `GetWriteFileFunction()` | `write_file` | Write/create files |
+| `GetApplyPatchFunction()` | `edit_file` | Apply unified diff patches |
+| `GetSkillFunction()` | `get_skill` | Query loaded agent skills |
+
+**For Semantic Kernel Compatibility:**
+
+These `AIFunction` objects work with Semantic Kernel's `KernelFunction` interface for seamless AI agent integration.
 
 ### Use with Dependency Injection
 
@@ -511,40 +528,38 @@ AgentSandbox/
 ├── AgentSandbox.sln
 ├── nuget.config
 ├── README.md
-├── AgentSandbox.Core/               # Core library
-│   ├── Sandbox.cs                   # Main sandbox class
-│   ├── SandboxManager.cs            # Multi-sandbox manager
-│   ├── SandboxOptions.cs            # Configuration options
+├── AgentSandbox.Core/                  # Core library
+│   ├── Sandbox.cs                      # Main sandbox class
+│   ├── SandboxManager.cs               # Multi-sandbox manager
+│   ├── SandboxOptions.cs               # Configuration options
 │   ├── FileSystem/
-│   │   ├── FileSystem.cs            # In-memory VFS
-│   │   └── IFileSystem.cs           # Filesystem interfaces
+│   │   ├── FileSystem.cs               # In-memory VFS
+│   │   └── IFileSystem.cs              # Filesystem interfaces
 │   ├── Shell/
-│   │   ├── SandboxShell.cs          # CLI emulator
-│   │   ├── ShellResult.cs           # Command result model
-│   │   └── IShellCommand.cs         # Extension interface
-│   └── ShellExtensions/
-│       ├── CurlCommand.cs           # HTTP client
-│       ├── JqCommand.cs             # JSON processor
-│       └── GitCommand.cs            # Simulated git
-├── AgentSandbox.Extensions/     # Semantic Kernel integration
-│   └── KernelExtensions.cs          # Kernel builder extensions
+│   │   ├── SandboxShell.cs             # CLI emulator
+│   │   ├── ShellResult.cs              # Command result model
+│   │   └── IShellCommand.cs            # Extension interface
+│   ├── ShellExtensions/
+│   │   ├── CurlCommand.cs              # HTTP client
+│   │   ├── JqCommand.cs                # JSON processor
+│   │   └── GitCommand.cs               # Simulated git
+│   └── Telemetry/
+│       ├── SandboxTelemetryFacade.cs   # Centralized telemetry logic
+│       ├── SandboxTelemetry.cs         # Metrics and constants
+│       └── SandboxTelemetryOptions.cs  # Telemetry configuration
+├── AgentSandbox.Extensions/            # Extensions and integrations
+│   ├── Extensions.cs                   # AI function generation
+│   ├── DependencyInjection/            # DI helpers
+│   └── Observability/                  # Telemetry adapters
 ├── samples/
-│   ├── InteractiveSandbox/          # Interactive console app
-│   │   └── Program.cs
-│   └── InteractiveAgent/            # Interactive agent chat app
-│       └── Program.cs
-├── AgentSandbox.Api/                # REST API
+│   ├── InteractiveSandbox/             # Interactive console app
+│   └── InteractiveAgent/               # Interactive agent chat
+├── AgentSandbox.Api/                   # REST API server
 │   ├── Endpoints/
-│   │   └── SandboxEndpoints.cs      # API routes
 │   └── Program.cs
 └── tests/
-    └── AgentSandbox.Tests/          # Unit tests
-        ├── VirtualFileSystemTests.cs
-        ├── SandboxShellTests.cs
-        └── ShellExtensions/
-            ├── CurlCommandTests.cs
-            ├── JqCommandTests.cs
-            └── GitCommandTests.cs
+    ├── AgentSandbox.Tests/             # Unit tests
+    └── AgentSandbox.Benchmarks/        # Performance benchmarks
 ```
 
 ## Building
@@ -562,8 +577,18 @@ dotnet test
 # Pack the core library
 dotnet pack AgentSandbox.Core -c Release -o ./nupkgs
 
-# Pack the Semantic Kernel integration (optional)
+# Pack the extensions library (DI, Observability, AI Functions)
 dotnet pack AgentSandbox.Extensions -c Release -o ./nupkgs
+```
+
+### Install from NuGet
+
+```bash
+# Core library (Sandbox, FileSystem, Shell)
+dotnet add package AgentSandbox.Core
+
+# Extensions (DI, Observability, AI Functions)
+dotnet add package AgentSandbox.Extensions
 ```
 
 ## License

@@ -1,6 +1,6 @@
 # AgentSandbox.Extensions
 
-Extensions for AgentSandbox including Semantic Kernel integration, dependency injection, and observability.
+Extensions for AgentSandbox including AI function generation, dependency injection, and observability.
 
 ## Installation
 
@@ -8,37 +8,71 @@ Extensions for AgentSandbox including Semantic Kernel integration, dependency in
 dotnet add package AgentSandbox.Extensions
 ```
 
-## Semantic Kernel Integration
+## AI Function Generation
 
-Register sandbox as AI functions for use with Semantic Kernel or Microsoft.Extensions.AI:
+Convert sandbox operations into `AIFunction` objects for use with AI chat APIs, Semantic Kernel, or agents:
 
 ```csharp
 using AgentSandbox.Core;
-using AgentSandbox.Extensions.SemanticKernel;
+using AgentSandbox.Extensions;
 
 var sandbox = new Sandbox();
 
-// Create AI functions
-var executeFunction = KernelExtensions.CreateSandboxFunction(sandbox);
-var getSkillFunction = KernelExtensions.CreateGetSkillFunction(sandbox);
+// Get all sandbox functions as AIFunction
+var functions = sandbox.GetSandboxFunctions();
 
-// Use with ChatClient
-var options = new ChatOptions
-{
-    Tools = [executeFunction, getSkillFunction]
-};
+// Or create individual functions
+var bashFunction = sandbox.GetBashFunction();
+var readFileFunction = sandbox.GetReadFileFunction();
+var writeFileFunction = sandbox.GetWriteFileFunction();
+var patchFunction = sandbox.GetApplyPatchFunction();
+var skillFunction = sandbox.GetSkillFunction();
+
+// Use with ChatClient or Semantic Kernel
+var options = new ChatOptions { Tools = functions.ToList() };
 ```
 
-### With Semantic Kernel
+### Available Functions
+
+- **`bash_shell`** - Execute shell commands with dynamic help text
+  - Parameters: `command` (string)
+  - Returns: Command output or error message
+
+- **`read_file`** - Read file contents with line-range support
+  - Parameters: `path` (string), `startLine` (int, default 0), `endLine` (int?, default null)
+  - Returns: File contents or lines from startLine to endLine
+  - Example: `read_file('/logs.txt', 100, 120)` returns lines 100-119
+
+- **`write_file`** - Write or create files
+  - Parameters: `path` (string), `content` (string)
+  - Returns: Success message or error
+  - Auto-creates parent directories
+
+- **`edit_file`** - Apply unified diff patches
+  - Parameters: `path` (string), `patch` (string)
+  - Returns: Success message or error
+  - Supports standard unified diff format
+
+- **`get_skill`** - Retrieve skill information and instructions
+  - Parameters: `skillName` (string)
+  - Returns: Skill metadata and instructions, or error if not found
+
+### Usage Example
 
 ```csharp
-var kernel = Kernel.CreateBuilder()
-    .AddOpenAIChatCompletion("gpt-4", apiKey)
-    .Build();
+using AgentSandbox.Core;
+using AgentSandbox.Extensions;
+using Microsoft.Extensions.AI;
 
-// Get function from registered sandbox
-var function = kernel.GetSandboxFunction();
-kernel.Plugins.AddFromFunctions("Sandbox", [function]);
+var sandbox = new Sandbox();
+var functions = sandbox.GetSandboxFunctions();
+
+// Register with chat client
+var client = new ChatClient(model: openAiModel);
+var response = await client.CompleteAsync(
+    messages: new[] { new ChatMessage(ChatRole.User, "List files in /tmp") },
+    tools: functions.ToList()
+);
 ```
 
 ## Dependency Injection

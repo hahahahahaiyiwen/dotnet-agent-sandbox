@@ -96,6 +96,7 @@ public static class SandboxTelemetry
 
     /// <summary>
     /// Number of files created.
+    /// Reserved for future use when file creation telemetry is integrated.
     /// </summary>
     public static readonly Counter<long> FilesCreated = 
         Meter.CreateCounter<long>(
@@ -105,6 +106,7 @@ public static class SandboxTelemetry
 
     /// <summary>
     /// Number of files deleted.
+    /// Reserved for future use when file deletion telemetry is integrated.
     /// </summary>
     public static readonly Counter<long> FilesDeleted = 
         Meter.CreateCounter<long>(
@@ -114,6 +116,7 @@ public static class SandboxTelemetry
 
     /// <summary>
     /// Number of files modified.
+    /// Reserved for future use when file modification telemetry is integrated.
     /// </summary>
     public static readonly Counter<long> FilesModified = 
         Meter.CreateCounter<long>(
@@ -123,6 +126,7 @@ public static class SandboxTelemetry
 
     /// <summary>
     /// Number of directories created.
+    /// Reserved for future use when directory creation telemetry is integrated.
     /// </summary>
     public static readonly Counter<long> DirectoriesCreated = 
         Meter.CreateCounter<long>(
@@ -132,6 +136,7 @@ public static class SandboxTelemetry
 
     /// <summary>
     /// Total bytes written to filesystem.
+    /// Reserved for future use when detailed I/O telemetry is implemented.
     /// </summary>
     public static readonly Counter<long> BytesWritten = 
         Meter.CreateCounter<long>(
@@ -141,6 +146,7 @@ public static class SandboxTelemetry
 
     /// <summary>
     /// Total bytes read from filesystem.
+    /// Reserved for future use when detailed I/O telemetry is implemented.
     /// </summary>
     public static readonly Counter<long> BytesRead = 
         Meter.CreateCounter<long>(
@@ -154,6 +160,7 @@ public static class SandboxTelemetry
 
     /// <summary>
     /// Number of skills invoked.
+    /// Reserved for future use when skill invocation telemetry is integrated.
     /// </summary>
     public static readonly Counter<long> SkillsInvoked = 
         Meter.CreateCounter<long>(
@@ -163,6 +170,7 @@ public static class SandboxTelemetry
 
     /// <summary>
     /// Number of shell scripts executed.
+    /// Reserved for future use when script execution telemetry is integrated.
     /// </summary>
     public static readonly Counter<long> ScriptsExecuted = 
         Meter.CreateCounter<long>(
@@ -172,6 +180,7 @@ public static class SandboxTelemetry
 
     /// <summary>
     /// Number of failed script executions.
+    /// Reserved for future use when script failure telemetry is integrated.
     /// </summary>
     public static readonly Counter<long> ScriptsFailed = 
         Meter.CreateCounter<long>(
