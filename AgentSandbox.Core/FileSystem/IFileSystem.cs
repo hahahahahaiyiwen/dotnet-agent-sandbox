@@ -74,23 +74,6 @@ public interface IFileSystem
     /// <exception cref="InvalidOperationException">If path is a directory.</exception>
     string ReadFile(string path, Encoding encoding);
     
-    /// <summary>
-    /// Reads lines from a file.
-    /// </summary>
-    /// <param name="path">Path to the file.</param>
-    /// <param name="encoding">Text encoding (defaults to UTF-8).</param>
-    /// <returns>Lines in the file.</returns>
-    /// <exception cref="FileNotFoundException">If file does not exist.</exception>
-    IEnumerable<string> ReadFileLines(string path, Encoding? encoding = null);
-    
-    /// <summary>
-    /// Opens a file for reading as a stream.
-    /// </summary>
-    /// <param name="path">Path to the file.</param>
-    /// <returns>Readable stream.</returns>
-    /// <exception cref="FileNotFoundException">If file does not exist.</exception>
-    Stream OpenRead(string path);
-    
     #endregion
     
     #region File Write Operations
@@ -113,37 +96,6 @@ public interface IFileSystem
     /// <param name="encoding">Text encoding (defaults to UTF-8).</param>
     /// <exception cref="InvalidOperationException">If path is a directory.</exception>
     void WriteFile(string path, string content, Encoding? encoding = null);
-    
-    /// <summary>
-    /// Writes lines to a file.
-    /// </summary>
-    /// <param name="path">Path to the file.</param>
-    /// <param name="lines">Lines to write.</param>
-    /// <param name="encoding">Text encoding (defaults to UTF-8).</param>
-    void WriteFile(string path, IEnumerable<string> lines, Encoding? encoding = null);
-    
-    /// <summary>
-    /// Appends bytes to a file, creating it if it doesn't exist.
-    /// </summary>
-    /// <param name="path">Path to the file.</param>
-    /// <param name="content">Content to append.</param>
-    void AppendToFile(string path, byte[] content);
-    
-    /// <summary>
-    /// Appends text to a file, creating it if it doesn't exist.
-    /// </summary>
-    /// <param name="path">Path to the file.</param>
-    /// <param name="content">Content to append.</param>
-    /// <param name="encoding">Text encoding (defaults to UTF-8).</param>
-    void AppendToFile(string path, string content, Encoding? encoding = null);
-    
-    /// <summary>
-    /// Opens a file for writing as a stream.
-    /// </summary>
-    /// <param name="path">Path to the file.</param>
-    /// <param name="append">If true, append to existing content; otherwise overwrite.</param>
-    /// <returns>Writable stream.</returns>
-    Stream OpenWrite(string path, bool append = false);
     
     #endregion
     
