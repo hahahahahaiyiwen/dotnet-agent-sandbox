@@ -245,7 +245,9 @@ public class SandboxShell : IShellContext
                 var path = ResolvePath(redirectFile);
                 if (appendMode)
                 {
-                    _fs.AppendToFile(path, result.Stdout);
+                    // Append mode: read existing content and append new content
+                    var existing = _fs.Exists(path) ? _fs.ReadFile(path, Encoding.UTF8) : string.Empty;
+                    _fs.WriteFile(path, existing + result.Stdout);
                 }
                 else
                 {

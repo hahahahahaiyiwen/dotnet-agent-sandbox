@@ -178,21 +178,6 @@ public class FileSystem : IFileSystem, ISnapshotableFileSystem, IFileSystemStats
         return encoding.GetString(ReadFile(path));
     }
     
-    /// <inheritdoc />
-    public IEnumerable<string> ReadFileLines(string path, Encoding? encoding = null)
-    {
-        encoding ??= Encoding.UTF8;
-        var text = ReadFile(path, encoding);
-        return text.Split('\n');
-    }
-    
-    /// <inheritdoc />
-    public Stream OpenRead(string path)
-    {
-        var bytes = ReadFile(path);
-        return new MemoryStream(bytes, writable: false);
-    }
-
     #endregion
 
     #region IFileSystem - File Write Operations
@@ -290,52 +275,6 @@ public class FileSystem : IFileSystem, ISnapshotableFileSystem, IFileSystemStats
     {
         encoding ??= Encoding.UTF8;
         WriteFile(path, encoding.GetBytes(content));
-    }
-    
-    /// <inheritdoc />
-    public void WriteFile(string path, IEnumerable<string> lines, Encoding? encoding = null)
-    {
-        WriteFile(path, string.Join("\n", lines), encoding);
-    }
-    
-    /// <inheritdoc />
-    public void AppendToFile(string path, byte[] content)
-    {
-        path = FileSystemPath.Normalize(path);
-        
-        lock (_lock)
-        {
-            var existing = _storage.Get(path);
-            if (existing != null)
-            {
-                if (existing.IsDirectory)
-                    throw new InvalidOperationException($"Cannot append to directory: {path}");
-                
-                var newContent = new byte[existing.Content.Length + content.Length];
-                existing.Content.CopyTo(newContent, 0);
-                content.CopyTo(newContent, existing.Content.Length);
-                existing.Content = newContent;
-                existing.ModifiedAt = DateTime.UtcNow;
-                _storage.Set(path, existing);
-            }
-            else
-            {
-                WriteFile(path, content);
-            }
-        }
-    }
-    
-    /// <inheritdoc />
-    public void AppendToFile(string path, string content, Encoding? encoding = null)
-    {
-        encoding ??= Encoding.UTF8;
-        AppendToFile(path, encoding.GetBytes(content));
-    }
-    
-    /// <inheritdoc />
-    public Stream OpenWrite(string path, bool append = false)
-    {
-        return new FileWriteStream(this, path, append);
     }
 
     #endregion
@@ -568,39 +507,4 @@ public class FileSystem : IFileSystem, ISnapshotableFileSystem, IFileSystemStats
     public int NodeCount => _storage.Count;
 
     #endregion
-}
-
-/// <summary>
-/// A writable stream that writes to the filesystem on dispose.
-/// </summary>
-internal class FileWriteStream : MemoryStream
-{
-    private readonly FileSystem _fs;
-    private readonly string _path;
-    private readonly bool _append;
-    private bool _disposed;
-
-    public FileWriteStream(FileSystem fs, string path, bool append)
-    {
-        _fs = fs;
-        _path = path;
-        _append = append;
-        
-        // If appending, load existing content
-        if (append && fs.Exists(path) && fs.IsFile(path))
-        {
-            var existing = fs.ReadFile(path);
-            Write(existing, 0, existing.Length);
-        }
-    }
-
-    protected override void Dispose(bool disposing)
-    {
-        if (!_disposed && disposing)
-        {
-            _disposed = true;
-            _fs.WriteFile(_path, ToArray());
-        }
-        base.Dispose(disposing);
-    }
 }

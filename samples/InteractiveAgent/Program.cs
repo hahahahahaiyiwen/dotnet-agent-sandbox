@@ -4,12 +4,13 @@ using AgentSandbox.Core.Shell;
 using AgentSandbox.Core.Shell.Extensions;
 using AgentSandbox.Core.Skills;
 using AgentSandbox.Core.Telemetry;
-using AgentSandbox.Extensions.SemanticKernel;
 using Azure.AI.OpenAI;
 using Azure.Identity;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 using OpenAI.Chat;
+using System.Xml.Linq;
+using AgentSandbox.Extensions;
 
 var endpoint = Environment.GetEnvironmentVariable("AZURE_OPENAI_ENDPOINT");
 var deployment = Environment.GetEnvironmentVariable("AZURE_OPENAI_DEPLOYMENT");
@@ -66,7 +67,7 @@ var chatClient = new AzureOpenAIClient(new Uri(endpoint), new AzureCliCredential
 AIAgent agent = chatClient.AsAIAgent(
     instructions: "You are a helpful assistant.",
     name: "SandboxAgent",
-    tools: new[] { KernelExtensions.GetBashFunction(sandbox), KernelExtensions.CreateGetSkillFunction(sandbox) })
+    tools: new[] { sandbox.GetBashFunction(), sandbox.GetSkillFunction() })
     .AsBuilder()
     .Build();
 
