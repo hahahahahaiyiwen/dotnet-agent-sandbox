@@ -69,7 +69,8 @@ public class SandboxShellTests
         
         Assert.True(result.Success);
         Assert.True(_fs.Exists("/newfile.txt"));
-        Assert.Equal(0, _fs.ReadFile("/newfile.txt", System.Text.Encoding.UTF8).Length);
+        var bytes = _fs.ReadFile("/newfile.txt");
+        Assert.Equal(0, bytes.Length);
     }
 
     [Fact]
@@ -136,7 +137,9 @@ public class SandboxShellTests
         
         Assert.True(result.Success);
         Assert.True(_fs.Exists("/dest.txt"));
-        Assert.Equal("content", _fs.ReadFile("/dest.txt", System.Text.Encoding.UTF8));
+        var contentBytes = _fs.ReadFileBytes("/dest.txt");
+        var content = System.Text.Encoding.UTF8.GetString(contentBytes);
+        Assert.Equal("content", content);
     }
 
     [Fact]
@@ -855,8 +858,12 @@ public class SandboxShellTests
         Assert.True(result.Success);
         Assert.True(_fs.Exists("/dest/file1.txt"));
         Assert.True(_fs.Exists("/dest/sub/file2.txt"));
-        Assert.Equal("content1", _fs.ReadFile("/dest/file1.txt", System.Text.Encoding.UTF8));
-        Assert.Equal("content2", _fs.ReadFile("/dest/sub/file2.txt", System.Text.Encoding.UTF8));
+        var content1Bytes = _fs.ReadFileBytes("/dest/file1.txt");
+        var content1 = System.Text.Encoding.UTF8.GetString(content1Bytes);
+        var content2Bytes = _fs.ReadFileBytes("/dest/sub/file2.txt");
+        var content2 = System.Text.Encoding.UTF8.GetString(content2Bytes);
+        Assert.Equal("content1", content1);
+        Assert.Equal("content2", content2);
     }
 
     [Fact]

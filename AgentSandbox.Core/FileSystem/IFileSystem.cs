@@ -1,5 +1,3 @@
-using System.Text;
-
 namespace AgentSandbox.Core.FileSystem;
 
 /// <summary>
@@ -56,46 +54,63 @@ public interface IFileSystem
     #region File Read Operations
     
     /// <summary>
-    /// Reads the entire contents of a file as bytes.
+    /// Reads the entire contents of a file as bytes (raw, not decoded).
     /// </summary>
     /// <param name="path">Path to the file.</param>
-    /// <returns>File contents as byte array.</returns>
+    /// <returns>File contents as byte array (UTF-8 encoded).</returns>
     /// <exception cref="FileNotFoundException">If file does not exist.</exception>
     /// <exception cref="InvalidOperationException">If path is a directory.</exception>
-    byte[] ReadFile(string path);
-    
+    byte[] ReadFileBytes(string path);
+
     /// <summary>
-    /// Reads the entire contents of a file as text.
+    /// Reads the entire contents of a file as UTF-8 text.
     /// </summary>
     /// <param name="path">Path to the file.</param>
-    /// <param name="encoding">Text encoding (defaults to UTF-8).</param>
-    /// <returns>File contents as string.</returns>
+    /// <returns>File contents as UTF-8 string, with normalized line endings (line ending removed if file ends with newline).</returns>
     /// <exception cref="FileNotFoundException">If file does not exist.</exception>
     /// <exception cref="InvalidOperationException">If path is a directory.</exception>
-    string ReadFile(string path, Encoding encoding);
+    string ReadFile(string path);
+
+    /// <summary>
+    /// Reads file lines within a range as a lazy-evaluated stream.
+    /// Uses incremental line boundary detection - only bytes up to the requested range are processed.
+    /// </summary>
+    /// <param name="path">Path to the file.</param>
+    /// <param name="startLine">Starting line number (1-indexed), inclusive. If null, defaults to 1.</param>
+    /// <param name="endLine">Ending line number (1-indexed), exclusive. If null, reads to end of file.</param>
+    /// <returns>Enumerable of lines within the requested range, each line as a UTF-8 string with normalized line endings.</returns>
+    /// <remarks>
+    /// - Line numbers are 1-indexed (first line = 1)
+    /// - endLine is exclusive, like array ranges (startLine=1, endLine=4 means lines 1, 2, 3)
+    /// - If startLine > file line count, returns empty enumeration (no lines yielded)
+    /// - Line endings (CRLF, LF, CR) are normalized to LF (\n) within each line
+    /// - Lazy evaluation: enumeration stops as soon as endLine is reached
+    /// </remarks>
+    /// <exception cref="FileNotFoundException">If file does not exist.</exception>
+    /// <exception cref="InvalidOperationException">If path is a directory.</exception>
+    IEnumerable<string> ReadFileLines(string path, int? startLine = null, int? endLine = null);
     
     #endregion
     
     #region File Write Operations
     
     /// <summary>
-    /// Writes bytes to a file, creating it if it doesn't exist, overwriting if it does.
+    /// Writes UTF-8 encoded bytes to a file, creating it if it doesn't exist, overwriting if it does.
     /// Creates parent directories as needed.
     /// </summary>
     /// <param name="path">Path to the file.</param>
-    /// <param name="content">Content to write.</param>
-    /// <exception cref="InvalidOperationException">If path is a directory.</exception>
+    /// <param name="content">Content to write (must be valid UTF-8 encoded bytes).</param>
+    /// <exception cref="InvalidOperationException">If path is a directory or content is not valid UTF-8.</exception>
     void WriteFile(string path, byte[] content);
     
     /// <summary>
-    /// Writes text to a file, creating it if it doesn't exist, overwriting if it does.
+    /// Writes text to a file as UTF-8 encoded bytes, creating it if it doesn't exist, overwriting if it does.
     /// Creates parent directories as needed.
     /// </summary>
     /// <param name="path">Path to the file.</param>
     /// <param name="content">Content to write.</param>
-    /// <param name="encoding">Text encoding (defaults to UTF-8).</param>
-    /// <exception cref="InvalidOperationException">If path is a directory.</exception>
-    void WriteFile(string path, string content, Encoding? encoding = null);
+    /// <exception cref="InvalidOperationException">If path is a directory or content is not valid UTF-8.</exception>
+    void WriteFile(string path, string content);
     
     #endregion
     

@@ -95,7 +95,8 @@ public class JqCommand : IShellCommand
             {
                 return ShellResult.Error($"jq: {inputFile}: No such file");
             }
-            jsonInput = context.FileSystem.ReadFile(path, System.Text.Encoding.UTF8);
+            var jsonBytes = context.FileSystem.ReadFileBytes(path);
+            jsonInput = System.Text.Encoding.UTF8.GetString(jsonBytes);
         }
         else
         {

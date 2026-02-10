@@ -24,7 +24,8 @@ public class WcCommand : IShellCommand
         foreach (var p in paths)
         {
             var path = context.ResolvePath(p);
-            var content = context.FileSystem.ReadFile(path, Encoding.UTF8);
+            var bytes = context.FileSystem.ReadFileBytes(path);
+            var content = Encoding.UTF8.GetString(bytes);
             var byteCount = Encoding.UTF8.GetByteCount(content);
             
             // Count lines and words without allocating arrays

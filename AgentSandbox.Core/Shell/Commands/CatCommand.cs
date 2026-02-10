@@ -25,7 +25,8 @@ public class CatCommand : IShellCommand
             if (context.FileSystem.IsDirectory(path))
                 return ShellResult.Error($"cat: {file}: Is a directory");
 
-            var content = context.FileSystem.ReadFile(path, Encoding.UTF8);
+            var bytes = context.FileSystem.ReadFileBytes(path);
+            var content = Encoding.UTF8.GetString(bytes);
             sb.Append(content);
         }
 

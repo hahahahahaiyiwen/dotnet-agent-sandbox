@@ -141,18 +141,13 @@ public class Sandbox : IDisposable, IObservableSandbox
     #region File System I/O
 
     /// <summary>
-    /// Reads the contents of a file as UTF8‐encoded text.
-    /// Supports reading the entire file or specific line ranges for large file handling.
+    /// Reads the entire contents of a file as UTF-8 encoded text.
     /// </summary>
     /// <param name="path">Path to the file to read.</param>
-    /// <param name="startLine">0-based index of the first line to read (default: 0 = start of file).</param>
-    /// <param name="endLine">0-based index of the line after the last line to read. 
-    /// If null, reads to end of file. Use endLine-startLine to get the number of lines.
-    /// Example: startLine=10, endLine=20 returns lines 10-19 (10 lines total).</param>
-    /// <returns>File contents as a string, with the specified line range.</returns>
+    /// <returns>File contents as a string, with line endings normalized and trailing newline removed if present.</returns>
     /// <exception cref="FileNotFoundException">File does not exist.</exception>
     /// <exception cref="InvalidOperationException">Path is a directory.</exception>
-    public string ReadFile(string path, int startLine = 0, int? endLine = null)
+    public string ReadFile(string path)
     {
         ThrowIfDisposed();
         LastActivityAt = DateTime.UtcNow;
@@ -162,48 +157,13 @@ public class Sandbox : IDisposable, IObservableSandbox
 
         try
         {
-            // Read the entire file first
-            var fullContent = _fileSystem.ReadFile(path, Encoding.UTF8);
+            // Delegate to FileSystem - it handles encoding and normalization
+            var result = _fileSystem.ReadFile(path);
             
-            // If no line range specified, return entire file
-            if (startLine == 0 && endLine == null)
-            {
-                stopwatch.Stop();
-                _telemetry.RecordReadFileSuccess(path, stopwatch, fullContent.Length, readMode: "full");
-                return fullContent;
-            }
-
-            // Normalize line endings for splitting
-            var normalized = fullContent.Replace("\r\n", "\n").Replace("\r", "\n");
-            var lines = normalized.Split('\n');
-            
-            // Remove empty last line if present
-            var lineList = lines.ToList();
-            if (lineList.Count > 0 && string.IsNullOrEmpty(lineList[lineList.Count - 1]))
-            {
-                lineList.RemoveAt(lineList.Count - 1);
-            }
-
-            // Calculate actual range
-            int actualStart = Math.Max(0, startLine);
-            int actualEnd = endLine.HasValue ? Math.Min(endLine.Value, lineList.Count) : lineList.Count;
-            
-            // Clamp to valid ranges
-            if (actualStart >= lineList.Count)
-            {
-                // Requesting lines beyond file length - return empty
-                stopwatch.Stop();
-                _telemetry.RecordReadFileSuccess(path, stopwatch, 0, readMode: "partial");
-                return string.Empty;
-            }
-
-            // Extract the requested range
-            var selectedLines = lineList.Skip(actualStart).Take(actualEnd - actualStart).ToList();
-            var result = string.Join(Environment.NewLine, selectedLines);
-
             stopwatch.Stop();
-            _telemetry.RecordReadFileSuccess(path, stopwatch, result.Length, readMode: "partial",
-                startLine: actualStart, endLine: actualEnd, linesReturned: actualEnd - actualStart);
+            
+            // Record telemetry
+            _telemetry.RecordReadFileSuccess(path, stopwatch, result.Length, readMode: "full");
 
             return result;
         }
@@ -218,6 +178,58 @@ public class Sandbox : IDisposable, IObservableSandbox
         }
     }
 
+    /// <summary>
+    /// Reads file lines within a range as a lazy-evaluated stream.
+    /// Useful for reading specific line ranges from large files without materializing the entire file.
+    /// </summary>
+    /// <param name="path">Path to the file to read.</param>
+    /// <param name="startLine">Starting line number (1-indexed), inclusive. If null, defaults to 1.</param>
+    /// <param name="endLine">Ending line number (1-indexed), exclusive. If null, reads to end of file.</param>
+    /// <returns>Enumerable of lines within the specified range. Line endings are normalized to LF.</returns>
+    /// <remarks>
+    /// - Line numbers are 1-indexed (first line = 1)
+    /// - endLine is exclusive (startLine=1, endLine=4 returns lines 1, 2, 3)
+    /// - Lines are yielded lazily as they're encountered during scanning
+    /// - Enumeration stops as soon as endLine is reached (early termination)
+    /// </remarks>
+    /// <exception cref="FileNotFoundException">File does not exist.</exception>
+    /// <exception cref="InvalidOperationException">Path is a directory.</exception>
+    public IEnumerable<string> ReadFileLines(string path, int? startLine = null, int? endLine = null)
+    {
+        ThrowIfDisposed();
+        LastActivityAt = DateTime.UtcNow;
+        
+        var stopwatch = Stopwatch.StartNew();
+        var activity = _telemetry.StartReadFileActivity(path);
+
+        try
+        {
+            // Delegate to FileSystem - it handles line scanning and normalization
+            var lines = _fileSystem.ReadFileLines(path, startLine, endLine);
+            
+            // Wrap in a custom enumerable to ensure telemetry and cleanup happen correctly
+            // We need to materialize to capture the metrics properly
+            var linesList = lines.ToList();
+            
+            stopwatch.Stop();
+            
+            // Record telemetry
+            int actualStartLine = startLine ?? 1;
+            _telemetry.RecordReadFileSuccess(path, stopwatch, 0, readMode: "partial",
+                startLine: actualStartLine, endLine: endLine ?? 0, linesReturned: linesList.Count);
+
+            return linesList;
+        }
+        catch (Exception ex)
+        {
+            _telemetry.RecordReadFileError(path, ex);
+            throw;
+        }
+        finally
+        {
+            activity?.Dispose();
+        }
+    }
 
     /// <summary>
     /// Writes or overwrites a file with the given content as UTF8‐encoded text.
@@ -236,7 +248,7 @@ public class Sandbox : IDisposable, IObservableSandbox
 
         try
         {
-            _fileSystem.WriteFile(path, content, Encoding.UTF8);
+            _fileSystem.WriteFile(path, content);
             stopwatch.Stop();
 
             _telemetry.RecordWriteFileSuccess(path, stopwatch, content.Length);
@@ -272,7 +284,8 @@ public class Sandbox : IDisposable, IObservableSandbox
         try
         {
             // Read the current file content, normalizing line endings
-            var text = _fileSystem.ReadFile(path, Encoding.UTF8);
+            var bytes = _fileSystem.ReadFileBytes(path);
+            var text = Encoding.UTF8.GetString(bytes);
             // Normalize to LF only for processing
             text = text.Replace("\r\n", "\n").Replace("\r", "\n");
             var lines = text.Split('\n').ToList();
@@ -286,7 +299,7 @@ public class Sandbox : IDisposable, IObservableSandbox
             var patched = ApplyUnifiedDiff(lines, patch);
 
             // Write the patched content (using system line endings)
-            _fileSystem.WriteFile(path, patched, Encoding.UTF8);
+            _fileSystem.WriteFile(path, patched);
             stopwatch.Stop();
 
             _telemetry.RecordApplyPatchSuccess(path, stopwatch, patched.Length);

@@ -246,7 +246,8 @@ public class SandboxShell : IShellContext
                 if (appendMode)
                 {
                     // Append mode: read existing content and append new content
-                    var existing = _fs.Exists(path) ? _fs.ReadFile(path, Encoding.UTF8) : string.Empty;
+                    var existingBytes = _fs.Exists(path) ? _fs.ReadFileBytes(path) : null;
+                    var existing = existingBytes != null ? Encoding.UTF8.GetString(existingBytes) : string.Empty;
                     _fs.WriteFile(path, existing + result.Stdout);
                 }
                 else
@@ -839,7 +840,8 @@ public class SandboxShell : IShellContext
         if (!_fs.Exists(scriptPath) || !_fs.IsFile(scriptPath))
             return ShellResult.Error($"sh: {args[0]}: No such file");
 
-        var scriptContent = _fs.ReadFile(scriptPath, Encoding.UTF8);
+        var scriptBytes = _fs.ReadFileBytes(scriptPath);
+        var scriptContent = Encoding.UTF8.GetString(scriptBytes);
         var scriptArgs = args.Skip(1).ToArray();
 
         return ExecuteScript(scriptContent, scriptArgs);

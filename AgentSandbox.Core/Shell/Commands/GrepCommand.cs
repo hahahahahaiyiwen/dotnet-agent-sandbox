@@ -135,7 +135,8 @@ public class GrepCommand : IShellCommand
         {
             try
             {
-                var content = context.FileSystem.ReadFile(fullPath, Encoding.UTF8);
+                var bytes = context.FileSystem.ReadFileBytes(fullPath);
+                var content = Encoding.UTF8.GetString(bytes);
                 
                 if (options.FilesOnly)
                 {
