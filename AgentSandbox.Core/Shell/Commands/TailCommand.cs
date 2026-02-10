@@ -41,7 +41,8 @@ public class TailCommand : IShellCommand
         foreach (var p in paths)
         {
             var path = context.ResolvePath(p);
-            var content = context.FileSystem.ReadFile(path, Encoding.UTF8);
+            var bytes = context.FileSystem.ReadFileBytes(path);
+            var content = Encoding.UTF8.GetString(bytes);
             
             // Use ring buffer to keep last N lines - avoids full string[] allocation
             var buffer = new (int Start, int Length)[maxLines];

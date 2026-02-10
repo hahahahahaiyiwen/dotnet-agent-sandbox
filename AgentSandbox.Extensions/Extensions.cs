@@ -56,7 +56,12 @@ public static class Extensions
             {
                 try
                 {
-                    return sandbox.ReadFile(path, startLine, endLine);
+                    // ReadFileLines uses 1-indexed line numbers, so convert from 0-based
+                    int? adjustedStartLine = startLine > 0 ? startLine + 1 : null;
+                    int? adjustedEndLine = endLine.HasValue ? endLine + 1 : null;
+                    
+                    var lines = sandbox.ReadFileLines(path, adjustedStartLine, adjustedEndLine);
+                    return string.Join("\n", lines);
                 }
                 catch (Exception ex)
                 {

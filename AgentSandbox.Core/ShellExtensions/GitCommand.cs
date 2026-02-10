@@ -700,7 +700,8 @@ public class GitCommand : IShellCommand
     private string GetCurrentBranch(IShellContext context)
     {
         var headPath = context.ResolvePath(HeadFile);
-        var head = context.FileSystem.ReadFile(headPath, Encoding.UTF8).Trim();
+        var headBytes = context.FileSystem.ReadFileBytes(headPath);
+        var head = Encoding.UTF8.GetString(headBytes).Trim();
         
         if (head.StartsWith("ref: refs/heads/"))
         {
@@ -717,7 +718,8 @@ public class GitCommand : IShellCommand
         if (!context.FileSystem.Exists(refPath))
             return null;
 
-        var hash = context.FileSystem.ReadFile(refPath, Encoding.UTF8).Trim();
+        var hashBytes = context.FileSystem.ReadFileBytes(refPath);
+        var hash = Encoding.UTF8.GetString(hashBytes).Trim();
         return LoadCommit(context, hash);
     }
 
@@ -727,7 +729,8 @@ public class GitCommand : IShellCommand
         if (!context.FileSystem.Exists(commitPath))
             return null;
 
-        var json = context.FileSystem.ReadFile(commitPath, Encoding.UTF8);
+        var commitBytes = context.FileSystem.ReadFileBytes(commitPath);
+        var json = Encoding.UTF8.GetString(commitBytes);
         return JsonSerializer.Deserialize<GitCommit>(json, JsonOptions);
     }
 
@@ -737,7 +740,8 @@ public class GitCommand : IShellCommand
         if (!context.FileSystem.Exists(indexPath))
             return new GitIndex { Entries = new Dictionary<string, GitIndexEntry>() };
 
-        var json = context.FileSystem.ReadFile(indexPath, Encoding.UTF8);
+        var indexBytes = context.FileSystem.ReadFileBytes(indexPath);
+        var json = Encoding.UTF8.GetString(indexBytes);
         return JsonSerializer.Deserialize<GitIndex>(json, JsonOptions) 
             ?? new GitIndex { Entries = new Dictionary<string, GitIndexEntry>() };
     }
@@ -754,7 +758,8 @@ public class GitCommand : IShellCommand
         if (!context.FileSystem.Exists(configPath))
             return new GitConfig { User = new GitUser { Name = "Sandbox User", Email = "user@sandbox.local" } };
 
-        var json = context.FileSystem.ReadFile(configPath, Encoding.UTF8);
+        var configBytes = context.FileSystem.ReadFileBytes(configPath);
+        var json = Encoding.UTF8.GetString(configBytes);
         return JsonSerializer.Deserialize<GitConfig>(json, JsonOptions) 
             ?? new GitConfig { User = new GitUser { Name = "Sandbox User", Email = "user@sandbox.local" } };
     }
@@ -763,7 +768,8 @@ public class GitCommand : IShellCommand
     {
         if (absolutePath.Contains("/.git/")) return;
 
-        var content = context.FileSystem.ReadFile(absolutePath, Encoding.UTF8);
+        var contentBytes = context.FileSystem.ReadFileBytes(absolutePath);
+        var content = Encoding.UTF8.GetString(contentBytes);
         var hash = ComputeHash(content);
 
         // Store blob
@@ -823,14 +829,16 @@ public class GitCommand : IShellCommand
         {
             // Already absolute
         }
-        var content = context.FileSystem.ReadFile(fullPath, Encoding.UTF8);
+        var contentBytes = context.FileSystem.ReadFileBytes(fullPath);
+        var content = Encoding.UTF8.GetString(contentBytes);
         return ComputeHash(content);
     }
 
     private string GetObjectContent(IShellContext context, string hash)
     {
         var path = context.ResolvePath($"{ObjectsDir}/{hash}");
-        return context.FileSystem.ReadFile(path, Encoding.UTF8);
+        var bytes = context.FileSystem.ReadFileBytes(path);
+        return Encoding.UTF8.GetString(bytes);
     }
 
     private void AppendFileDiff(IShellContext context, StringBuilder sb, string filePath, string oldHash, string newHash, bool readNewFromFile = false)
@@ -842,7 +850,7 @@ public class GitCommand : IShellCommand
 
         var oldContent = GetObjectContent(context, oldHash);
         var newContent = readNewFromFile 
-            ? context.FileSystem.ReadFile(context.ResolvePath(filePath), Encoding.UTF8)
+            ? (context.FileSystem.ReadFileBytes(context.ResolvePath(filePath)) is byte[] b ? Encoding.UTF8.GetString(b) : string.Empty)
             : GetObjectContent(context, newHash);
 
         var oldLines = oldContent.Split('\n');

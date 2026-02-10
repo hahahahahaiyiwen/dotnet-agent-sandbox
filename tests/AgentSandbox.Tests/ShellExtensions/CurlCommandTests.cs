@@ -162,7 +162,9 @@ public class CurlCommandTests
 
         Assert.True(result.Success);
         Assert.True(_fs.Exists("/response.json"));
-        Assert.Equal("{\"data\": \"value\"}", _fs.ReadFile("/response.json", Encoding.UTF8));
+        var responseBytes = _fs.ReadFileBytes("/response.json");
+        var response = Encoding.UTF8.GetString(responseBytes);
+        Assert.Equal("{\"data\": \"value\"}", response);
     }
 
     [Fact]

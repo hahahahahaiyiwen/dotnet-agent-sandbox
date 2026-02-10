@@ -41,7 +41,8 @@ public class HeadCommand : IShellCommand
         foreach (var p in paths)
         {
             var path = context.ResolvePath(p);
-            var content = context.FileSystem.ReadFile(path, Encoding.UTF8);
+            var bytes = context.FileSystem.ReadFileBytes(path);
+            var content = Encoding.UTF8.GetString(bytes);
             
             var count = 0;
             foreach (var (_, line) in content.EnumerateLines())
