@@ -1,5 +1,6 @@
 using AgentSandbox.InteractiveAgent;
 using AgentSandbox.Core;
+using AgentSandbox.Core.Importing;
 using AgentSandbox.Core.Shell;
 using AgentSandbox.Core.Shell.Extensions;
 using AgentSandbox.Core.Skills;
@@ -31,13 +32,22 @@ using var sandbox = new Sandbox(options: new SandboxOptions
     {
         new GitCommand()
     },
+    Imports =
+    [
+        new FileImportOptions
+        {
+            Path = "/.sandbox/skills/brainstorming",
+            Source = new FileSystemSource(Path.Combine(skillsPath, "brainstorming"))
+        },
+        new FileImportOptions
+        {
+            Path = "/.sandbox/skills/executing-plans",
+            Source = new FileSystemSource(Path.Combine(skillsPath, "executing-plans"))
+        }
+    ],
     AgentSkills = new AgentSkillOptions
     {
-        Skills = 
-        [
-            AgentSkill.FromPath(Path.Combine(skillsPath, "brainstorming")),
-            AgentSkill.FromPath(Path.Combine(skillsPath, "executing-plans"))
-        ]
+        BasePath = "/.sandbox/skills"
     },
     Telemetry = new SandboxTelemetryOptions
     {
