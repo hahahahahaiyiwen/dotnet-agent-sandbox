@@ -56,31 +56,33 @@ var options = new SandboxOptions
 
 ## Agent Skills
 
-Load [agentskills.io](https://agentskills.io) compatible skill packages:
+Load [agentskills.io](https://agentskills.io) compatible skill packages. Skills are discovered by scanning the skill base path for `SKILL.md` files after imports:
 
 ```csharp
 var options = new SandboxOptions
 {
+    Imports = [
+        // Import skill files from filesystem
+        new FileImportOptions("/skills/python-dev", new FileSystemSource("C:/skills/python-dev")),
+        // Or import from in-memory sources
+        new FileImportOptions("/skills/custom", new InMemorySource()
+            .AddFile("SKILL.md", "---\nname: my-skill\ndescription: Custom skill\n---\n# Instructions...")
+            .AddFile("scripts/setup.sh", "#!/bin/bash\necho 'Setting up'"))
+    ],
     AgentSkills = new AgentSkillOptions
     {
-        Skills = [
-            AgentSkill.FromPath("C:/skills/python-dev"),
-            AgentSkill.FromFiles(new Dictionary<string, string>
-            {
-                ["SKILL.md"] = "---\nname: my-skill\ndescription: Custom skill\n---\n# Instructions..."
-            })
-        ]
+        BasePath = "/skills"  // Where to discover skills in sandbox file system
     }
 };
 
 var sandbox = new Sandbox(options: options);
 
-// Access skill instructions
+// Skills are automatically discovered from BasePath
 var skills = sandbox.GetSkills();
 Console.WriteLine(skills[0].Metadata.Instructions);
 
 // Execute skill scripts
-sandbox.Execute("sh /.sandbox/skills/python-dev/scripts/setup.sh");
+sandbox.Execute("sh /skills/python-dev/scripts/setup.sh");
 ```
 
 ## Built-in Commands
