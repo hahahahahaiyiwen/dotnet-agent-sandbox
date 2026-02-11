@@ -23,7 +23,15 @@ public class AgentSkillsTests
         var skillPath = Path.Combine(TestSkillsPath, "test-skill");
         var options = new SandboxOptions
         {
-            AgentSkills = new AgentSkillOptions { Skills = [AgentSkill.FromPath(skillPath)] }
+            Imports =
+            [
+                new FileImportOptions
+                {
+                    Path = "/.sandbox/skills/test-skill",
+                    Source = new FileSystemSource(skillPath)
+                }
+            ],
+            AgentSkills = new AgentSkillOptions { BasePath = "/.sandbox/skills" }
         };
 
         var sandbox = new Sandbox(options: options);
@@ -41,7 +49,15 @@ public class AgentSkillsTests
         var skillPath = Path.Combine(TestSkillsPath, "test-skill");
         var options = new SandboxOptions
         {
-            AgentSkills = new AgentSkillOptions { Skills = [AgentSkill.FromPath(skillPath)] }
+            Imports =
+            [
+                new FileImportOptions
+                {
+                    Path = "/.sandbox/skills/test-skill",
+                    Source = new FileSystemSource(skillPath)
+                }
+            ],
+            AgentSkills = new AgentSkillOptions { BasePath = "/.sandbox/skills" }
         };
 
         var sandbox = new Sandbox(options: options);
@@ -60,7 +76,15 @@ public class AgentSkillsTests
         var skillPath = Path.Combine(TestSkillsPath, "test-skill");
         var options = new SandboxOptions
         {
-            AgentSkills = new AgentSkillOptions { Skills = [AgentSkill.FromPath(skillPath)] }
+            Imports =
+            [
+                new FileImportOptions
+                {
+                    Path = "/.sandbox/skills/test-skill",
+                    Source = new FileSystemSource(skillPath)
+                }
+            ],
+            AgentSkills = new AgentSkillOptions { BasePath = "/.sandbox/skills" }
         };
 
         var sandbox = new Sandbox(options: options);
@@ -75,7 +99,15 @@ public class AgentSkillsTests
         var skillPath = Path.Combine(TestSkillsPath, "test-skill");
         var options = new SandboxOptions
         {
-            AgentSkills = new AgentSkillOptions { Skills = [AgentSkill.FromPath(skillPath)] }
+            Imports =
+            [
+                new FileImportOptions
+                {
+                    Path = "/.sandbox/skills/test-skill",
+                    Source = new FileSystemSource(skillPath)
+                }
+            ],
+            AgentSkills = new AgentSkillOptions { BasePath = "/.sandbox/skills" }
         };
 
         var sandbox = new Sandbox(options: options);
@@ -93,7 +125,15 @@ public class AgentSkillsTests
         var skillPath = Path.Combine(TestSkillsPath, "test-skill");
         var options = new SandboxOptions
         {
-            AgentSkills = new AgentSkillOptions { Skills = [AgentSkill.FromPath(skillPath)] }
+            Imports =
+            [
+                new FileImportOptions
+                {
+                    Path = "/.sandbox/skills/test-skill",
+                    Source = new FileSystemSource(skillPath)
+                }
+            ],
+            AgentSkills = new AgentSkillOptions { BasePath = "/.sandbox/skills" }
         };
 
         var sandbox = new Sandbox(options: options);
@@ -110,7 +150,15 @@ public class AgentSkillsTests
         var skillPath = Path.Combine(TestSkillsPath, "test-skill");
         var options = new SandboxOptions
         {
-            AgentSkills = new AgentSkillOptions { Skills = [AgentSkill.FromPath(skillPath)] }
+            Imports =
+            [
+                new FileImportOptions
+                {
+                    Path = "/.sandbox/skills/test-skill",
+                    Source = new FileSystemSource(skillPath)
+                }
+            ],
+            AgentSkills = new AgentSkillOptions { BasePath = "/.sandbox/skills" }
         };
 
         var sandbox = new Sandbox(options: options);
@@ -126,16 +174,25 @@ public class AgentSkillsTests
     public void Sandbox_LoadsMultipleSkills()
     {
         var skillPath = Path.Combine(TestSkillsPath, "test-skill");
-        
-        // Create a second skill using in-memory source
-        var skill2 = AgentSkill.FromFiles(new Dictionary<string, string>
-        {
-            ["SKILL.md"] = "---\nname: temp-skill\ndescription: Temporary skill\n---\n\n# Temp Skill"
-        });
-
         var options = new SandboxOptions
         {
-            AgentSkills = new AgentSkillOptions { Skills = [AgentSkill.FromPath(skillPath), skill2] }
+            Imports =
+            [
+                new FileImportOptions
+                {
+                    Path = "/.sandbox/skills/test-skill",
+                    Source = new FileSystemSource(skillPath)
+                },
+                new FileImportOptions
+                {
+                    Path = "/.sandbox/skills/temp-skill",
+                    Source = new InMemorySource(new Dictionary<string, string>
+                    {
+                        ["SKILL.md"] = "---\nname: temp-skill\ndescription: Temporary skill\n---\n\n# Temp Skill"
+                    })
+                }
+            ],
+            AgentSkills = new AgentSkillOptions { BasePath = "/.sandbox/skills" }
         };
 
         var sandbox = new Sandbox(options: options);
@@ -158,10 +215,17 @@ public class AgentSkillsTests
         var skillPath = Path.Combine(TestSkillsPath, "test-skill");
         var options = new SandboxOptions
         {
+            Imports =
+            [
+                new FileImportOptions
+                {
+                    Path = "/custom/skills/test-skill",
+                    Source = new FileSystemSource(skillPath)
+                }
+            ],
             AgentSkills = new AgentSkillOptions
             {
-                BasePath = "/custom/skills",
-                Skills = [AgentSkill.FromPath(skillPath)]
+                BasePath = "/custom/skills"
             }
         };
 
@@ -175,31 +239,19 @@ public class AgentSkillsTests
     }
 
     [Fact]
-    public void SandboxOptions_Clone_IncludesSkills()
+    public void SandboxOptions_Clone_IncludesBasePath()
     {
-        var skill1 = AgentSkill.FromFiles(new Dictionary<string, string>
-        {
-            ["SKILL.md"] = "---\nname: skill1\ndescription: Skill 1\n---\n"
-        });
-        var skill2 = AgentSkill.FromFiles(new Dictionary<string, string>
-        {
-            ["SKILL.md"] = "---\nname: skill2\ndescription: Skill 2\n---\n"
-        });
-
         var options = new SandboxOptions
         {
             AgentSkills = new AgentSkillOptions
             {
-                Skills = [skill1, skill2],
                 BasePath = "/custom/path"
             }
         };
 
         var clone = options.Clone();
 
-        Assert.Equal(2, clone.AgentSkills.Skills.Count);
         Assert.Equal("/custom/path", clone.AgentSkills.BasePath);
-        Assert.NotSame(options.AgentSkills.Skills, clone.AgentSkills.Skills);
     }
 
     [Fact]
@@ -220,21 +272,6 @@ public class AgentSkillsTests
         });
 
         Assert.IsType<InMemorySource>(skill.Source);
-    }
-
-    [Fact]
-    public void AgentSkill_NameOverride_UsesProvidedName()
-    {
-        var skill = AgentSkill.FromFiles(new Dictionary<string, string>
-        {
-            ["SKILL.md"] = "---\nname: original-name\ndescription: Test\n---\n"
-        }, name: "override-name");
-
-        var options = new SandboxOptions { AgentSkills = new AgentSkillOptions { Skills = [skill] } };
-        var sandbox = new Sandbox(options: options);
-
-        var loaded = sandbox.GetSkills()[0];
-        Assert.Equal("override-name", loaded.Name);
     }
 
     [Fact]
@@ -270,19 +307,6 @@ public class AgentSkillsTests
         var content = "# No frontmatter here";
         
         Assert.Throws<InvalidSkillException>(() => SkillMetadata.Parse(content));
-    }
-
-    [Fact]
-    public void Sandbox_ThrowsOnMissingSkillMd()
-    {
-        var skill = AgentSkill.FromFiles(new Dictionary<string, string>
-        {
-            ["README.md"] = "No SKILL.md here"
-        });
-
-        var options = new SandboxOptions { AgentSkills = new AgentSkillOptions { Skills = [skill] } };
-        
-        Assert.Throws<InvalidSkillException>(() => new Sandbox(options: options));
     }
 
     [Fact]

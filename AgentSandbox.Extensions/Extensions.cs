@@ -40,7 +40,7 @@ public static class Extensions
                 return $"Error: {result.Stderr}";
             },
             name: "bash_shell",
-            description: sandbox.GetToolDescription());
+            description: sandbox.GetBashToolDescription());
     }
 
     /// <summary>

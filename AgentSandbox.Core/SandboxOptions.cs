@@ -38,7 +38,8 @@ public class SandboxOptions
     public IReadOnlyList<FileImportOptions> Imports { get; set; } = [];
 
     /// <summary>
-    /// Agent skills configuration. Skills are loaded at initialization.
+    /// Agent skills configuration. Skills are discovered from the BasePath after file imports.
+    /// Skills should be imported to subdirectories under BasePath via FileImportOptions.
     /// </summary>
     public AgentSkillOptions AgentSkills { get; set; } = new();
 
@@ -62,7 +63,6 @@ public class SandboxOptions
         Imports = Imports.ToArray(),
         AgentSkills = new AgentSkillOptions
         {
-            Skills = AgentSkills.Skills.ToArray(),
             BasePath = AgentSkills.BasePath
         },
         Telemetry = Telemetry
