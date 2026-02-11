@@ -80,7 +80,7 @@ var response = await client.CompleteAsync(
 ```csharp
 using AgentSandbox.Extensions.DependencyInjection;
 
-services.AddSandbox(options =>
+services.AddAgentSandbox(options =>
 {
     options.WorkingDirectory = "/workspace";
     options.MaxTotalSize = 1024 * 1024;

@@ -1,5 +1,4 @@
 using System.Text;
-using AgentSandbox.Core.Shell;
 
 namespace AgentSandbox.Core.Shell.Commands;
 
@@ -41,31 +40,18 @@ public class TailCommand : IShellCommand
         foreach (var p in paths)
         {
             var path = context.ResolvePath(p);
-            var bytes = context.FileSystem.ReadFileBytes(path);
-            var content = Encoding.UTF8.GetString(bytes);
             
             // Use ring buffer to keep last N lines - avoids full string[] allocation
-            var buffer = new (int Start, int Length)[maxLines];
+            var buffer = new string[maxLines];
             var bufferIndex = 0;
             var totalLines = 0;
             
-            var span = content.AsSpan();
-            var start = 0;
-            
-            for (int i = 0; i <= span.Length; i++)
+            // Stream lines directly - no UTF-8 string materialization
+            foreach (var line in context.FileSystem.ReadFileLines(path))
             {
-                if (i == span.Length || span[i] == '\n')
-                {
-                    var lineEnd = i;
-                    // Handle \r\n
-                    if (lineEnd > start && lineEnd > 0 && span[lineEnd - 1] == '\r')
-                        lineEnd--;
-                    
-                    buffer[bufferIndex] = (start, lineEnd - start);
-                    bufferIndex = (bufferIndex + 1) % maxLines;
-                    totalLines++;
-                    start = i + 1;
-                }
+                buffer[bufferIndex] = line;
+                bufferIndex = (bufferIndex + 1) % maxLines;
+                totalLines++;
             }
             
             // Output the lines in order
@@ -75,9 +61,8 @@ public class TailCommand : IShellCommand
             for (int i = 0; i < linesToOutput; i++)
             {
                 var idx = (startIndex + i) % maxLines;
-                var (lineStart, length) = buffer[idx];
                 if (i > 0) output.AppendLine();
-                output.Append(content.AsSpan(lineStart, length));
+                output.Append(buffer[idx]);
             }
             output.AppendLine();
         }

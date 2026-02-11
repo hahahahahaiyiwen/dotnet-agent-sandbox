@@ -1,5 +1,3 @@
-using System.Text;
-
 namespace AgentSandbox.Core.Shell.Commands;
 
 /// <summary>
@@ -16,7 +14,7 @@ public class CatCommand : IShellCommand
         if (args.Length == 0)
             return ShellResult.Error("cat: missing operand");
 
-        var sb = new StringBuilder();
+        var parts = new List<string>();
         foreach (var file in args)
         {
             var path = context.ResolvePath(file);
@@ -25,11 +23,10 @@ public class CatCommand : IShellCommand
             if (context.FileSystem.IsDirectory(path))
                 return ShellResult.Error($"cat: {file}: Is a directory");
 
-            var bytes = context.FileSystem.ReadFileBytes(path);
-            var content = Encoding.UTF8.GetString(bytes);
-            sb.Append(content);
+            // Use ReadFile() - IFileSystem handles UTF-8 decoding, no manual conversion needed
+            parts.Add(context.FileSystem.ReadFile(path));
         }
 
-        return ShellResult.Ok(sb.ToString());
+        return ShellResult.Ok(string.Join("\n", parts));
     }
 }
