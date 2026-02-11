@@ -24,28 +24,31 @@ public class WcCommand : IShellCommand
         foreach (var p in paths)
         {
             var path = context.ResolvePath(p);
-            var bytes = context.FileSystem.ReadFileBytes(path);
-            var content = Encoding.UTF8.GetString(bytes);
-            var byteCount = Encoding.UTF8.GetByteCount(content);
-            
-            // Count lines and words without allocating arrays
             var lines = 0;
             var words = 0;
+            var byteCount = 0;
             var inWord = false;
             
-            foreach (var c in content.AsSpan())
+            // Stream lines directly - no UTF-8 string materialization
+            foreach (var line in context.FileSystem.ReadFileLines(path))
             {
-                if (c == '\n') lines++;
+                lines++;
+                // Count bytes for this line (including newline in original file)
+                byteCount += Encoding.UTF8.GetByteCount(line) + 1; // +1 for the newline character
                 
-                var isWhitespace = c == ' ' || c == '\n' || c == '\t' || c == '\r';
-                if (isWhitespace)
+                // Count words while iterating
+                foreach (var c in line.AsSpan())
                 {
-                    inWord = false;
-                }
-                else if (!inWord)
-                {
-                    inWord = true;
-                    words++;
+                    var isWhitespace = c == ' ' || c == '\t';
+                    if (isWhitespace)
+                    {
+                        inWord = false;
+                    }
+                    else if (!inWord)
+                    {
+                        inWord = true;
+                        words++;
+                    }
                 }
             }
             
