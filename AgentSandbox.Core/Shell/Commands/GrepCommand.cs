@@ -1,5 +1,6 @@
 using System.Text;
 using System.Text.RegularExpressions;
+using AgentSandbox.Core.FileSystem;
 
 namespace AgentSandbox.Core.Shell.Commands;
 
@@ -135,13 +136,10 @@ public class GrepCommand : IShellCommand
         {
             try
             {
-                var bytes = context.FileSystem.ReadFileBytes(fullPath);
-                var content = Encoding.UTF8.GetString(bytes);
-                
                 if (options.FilesOnly)
                 {
                     // -l: just check if any line matches
-                    foreach (var (_, line) in content.EnumerateLines())
+                    foreach (var line in context.FileSystem.ReadFileLines(fullPath))
                     {
                         var matches = regex.IsMatch(line);
                         if (options.InvertMatch) matches = !matches;
@@ -156,7 +154,7 @@ public class GrepCommand : IShellCommand
                 {
                     // -c: count matching lines
                     var count = 0;
-                    foreach (var (_, line) in content.EnumerateLines())
+                    foreach (var line in context.FileSystem.ReadFileLines(fullPath))
                     {
                         var matches = regex.IsMatch(line);
                         if (options.InvertMatch) matches = !matches;
@@ -170,15 +168,17 @@ public class GrepCommand : IShellCommand
                 }
                 else if (hasContext)
                 {
-                    // Context mode: need to buffer lines
-                    SearchWithContext(content, regex, options, displayPath, showPrefix, output);
+                    // Context mode: buffer lines on-demand
+                    SearchWithContext(context.FileSystem, fullPath, regex, options, displayPath, showPrefix, output);
                 }
                 else
                 {
-                    // Normal search
+                    // Normal search: stream line-by-line
                     var matchCount = 0;
-                    foreach (var (lineNum, line) in content.EnumerateLines())
+                    var lineNum = 0;
+                    foreach (var line in context.FileSystem.ReadFileLines(fullPath))
                     {
+                        lineNum++;
                         if (options.MaxCount > 0 && matchCount >= options.MaxCount) break;
                         
                         var matches = regex.IsMatch(line);
@@ -192,8 +192,8 @@ public class GrepCommand : IShellCommand
                             
                             if (options.OnlyMatching && !options.InvertMatch)
                             {
-                                // -o: print only matched parts
-                                foreach (Match m in regex.Matches(line.ToString()))
+                                 // -o: print only matched parts
+                                foreach (Match m in regex.Matches(line))
                                 {
                                     output.Append(prefix);
                                     output.Append(lineNumStr);
@@ -221,19 +221,21 @@ public class GrepCommand : IShellCommand
     }
 
     private static void SearchWithContext(
-        string content,
+        IFileSystem fileSystem,
+        string filePath,
         Regex regex,
         GrepOptions options,
         string displayPath,
         bool showPrefix,
         StringBuilder output)
     {
-        // Collect all lines into array for context access
-        var lines = new List<string>();
-        foreach (var (_, line) in content.EnumerateLines())
-        {
-            lines.Add(line.ToString());
-        }
+        // Context mode requires bidirectional access (before and after a match line)
+        // So we must buffer all lines. However, we use ToList() efficiently since:
+        // 1. It only materializes strings (from ReadFileLines), not bytes+string copies
+        // 2. Context searches are less common than basic searches (already optimized in Phase 1)
+        // 3. Future optimization could use file seeking if needed for huge files
+        
+        var lines = fileSystem.ReadFileLines(filePath).ToList();
 
         var printedLines = new HashSet<int>();
         var matchCount = 0;
@@ -250,7 +252,7 @@ public class GrepCommand : IShellCommand
             {
                 matchCount++;
                 
-                // Calculate context range
+                // Calculate context range (0-indexed)
                 var startLine = Math.Max(0, i - options.BeforeContext);
                 var endLine = Math.Min(lines.Count - 1, i + options.AfterContext);
 

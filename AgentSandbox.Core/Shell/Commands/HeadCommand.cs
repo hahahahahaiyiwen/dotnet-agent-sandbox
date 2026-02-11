@@ -1,5 +1,4 @@
 using System.Text;
-using AgentSandbox.Core.Shell;
 
 namespace AgentSandbox.Core.Shell.Commands;
 
@@ -41,13 +40,10 @@ public class HeadCommand : IShellCommand
         foreach (var p in paths)
         {
             var path = context.ResolvePath(p);
-            var bytes = context.FileSystem.ReadFileBytes(path);
-            var content = Encoding.UTF8.GetString(bytes);
             
             var count = 0;
-            foreach (var (_, line) in content.EnumerateLines())
+            foreach (var line in context.FileSystem.ReadFileLines(path, endLine: maxLines + 1))
             {
-                if (count >= maxLines) break;
                 if (count > 0) output.AppendLine();
                 output.Append(line);
                 count++;
