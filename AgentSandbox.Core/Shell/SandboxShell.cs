@@ -1,4 +1,5 @@
 using AgentSandbox.Core.FileSystem;
+using AgentSandbox.Core.Security;
 using AgentSandbox.Core.Shell.Commands;
 using System.Diagnostics;
 using System.Text;
@@ -21,6 +22,8 @@ public class SandboxShell : IShellContext
     private readonly Dictionary<string, IShellCommand> _builtinCommands = new();
     private readonly Dictionary<string, IShellCommand> _extensionCommands = new();
     private readonly Dictionary<object, object> _sessionCache = new();
+    private readonly ISecretBroker? _secretBroker;
+    private readonly HashSet<string> _resolvedSecrets = new(StringComparer.Ordinal);
 
     #endregion
 
@@ -38,6 +41,22 @@ public class SandboxShell : IShellContext
     
     string IShellContext.ResolvePath(string path) => ResolvePath(path);
 
+    bool IShellContext.TryResolveSecret(string secretRef, out string secretValue)
+    {
+        if (_secretBroker == null || !_secretBroker.TryResolve(secretRef, out secretValue))
+        {
+            secretValue = string.Empty;
+            return false;
+        }
+
+        if (!string.IsNullOrEmpty(secretValue))
+        {
+            _resolvedSecrets.Add(secretValue);
+        }
+
+        return true;
+    }
+
     T IShellContext.GetOrCreate<T>(object key, Func<T> factory)
     {
         if (_sessionCache.TryGetValue(key, out var cached))
@@ -53,9 +72,10 @@ public class SandboxShell : IShellContext
 
     #region Constructor
 
-    public SandboxShell(IFileSystem fileSystem)
+    public SandboxShell(IFileSystem fileSystem, ISecretBroker? secretBroker = null)
     {
         _fs = fileSystem;
+        _secretBroker = secretBroker;
         
         _environment["PWD"] = _currentDirectory;
 
@@ -323,7 +343,38 @@ public class SandboxShell : IShellContext
         return FileSystemPath.Normalize(combined);
     }
 
+    internal ShellResult RedactSecrets(ShellResult result)
+    {
+        if (_resolvedSecrets.Count == 0)
+        {
+            return result;
+        }
+
+        result.Stdout = RedactText(result.Stdout);
+        result.Stderr = RedactText(result.Stderr);
+        return result;
+    }
+
     #endregion
+
+    private string RedactText(string text)
+    {
+        if (string.IsNullOrEmpty(text) || _resolvedSecrets.Count == 0)
+        {
+            return text;
+        }
+
+        var redacted = text;
+        foreach (var secret in _resolvedSecrets)
+        {
+            if (!string.IsNullOrEmpty(secret))
+            {
+                redacted = redacted.Replace(secret, "***REDACTED***", StringComparison.Ordinal);
+            }
+        }
+
+        return redacted;
+    }
 
     #region Private Methods - Command Parsing
 

@@ -1,5 +1,8 @@
 using AgentSandbox.Core;
+using AgentSandbox.Core.Security;
+using AgentSandbox.Core.Shell.Extensions;
 using AgentSandbox.Core.Telemetry;
+using System.Net;
 
 namespace AgentSandbox.Tests;
 
@@ -188,5 +191,71 @@ public class TelemetryTests
         Assert.NotNull(capturedEvent);
         Assert.NotNull(capturedEvent.Output);
         Assert.Contains("(truncated)", capturedEvent.Output);
+    }
+
+    [Fact]
+    public void Sandbox_ResolvedSecrets_AreRedactedFromHistoryAndTelemetry()
+    {
+        CommandExecutedEvent? capturedEvent = null;
+        var observer = new DelegateSandboxObserver(onCommandExecuted: e => capturedEvent = e);
+        var httpClient = new HttpClient(new SecretEchoHandler("super-secret-token"));
+
+        var options = new SandboxOptions
+        {
+            SecretBroker = new TestSecretBroker(new Dictionary<string, string>
+            {
+                ["api-token"] = "super-secret-token"
+            }),
+            Telemetry = new SandboxTelemetryOptions { Enabled = true },
+            ShellExtensions = new[] { new CurlCommand(httpClient) }
+        };
+
+        using var sandbox = new Sandbox(options: options);
+        sandbox.Subscribe(observer);
+
+        var result = sandbox.Execute("curl -H \"Authorization: Bearer secretRef:api-token\" http://example.com/api");
+        var history = sandbox.GetHistory();
+
+        Assert.NotNull(capturedEvent);
+        Assert.Equal("curl", capturedEvent.CommandName);
+        Assert.DoesNotContain("super-secret-token", capturedEvent.Output ?? string.Empty);
+        Assert.Contains("***REDACTED***", capturedEvent.Output ?? string.Empty);
+        Assert.DoesNotContain("super-secret-token", result.Stdout);
+        Assert.Contains("***REDACTED***", result.Stdout);
+        Assert.Single(history);
+        Assert.DoesNotContain("super-secret-token", history[0].Stdout);
+    }
+
+    private sealed class TestSecretBroker : ISecretBroker
+    {
+        private readonly IReadOnlyDictionary<string, string> _secrets;
+
+        public TestSecretBroker(IReadOnlyDictionary<string, string> secrets)
+        {
+            _secrets = secrets;
+        }
+
+        public bool TryResolve(string secretRef, out string secretValue)
+        {
+            return _secrets.TryGetValue(secretRef, out secretValue!);
+        }
+    }
+
+    private sealed class SecretEchoHandler : HttpMessageHandler
+    {
+        private readonly string _secret;
+
+        public SecretEchoHandler(string secret)
+        {
+            _secret = secret;
+        }
+
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent($"echo:{_secret}")
+            });
+        }
     }
 }

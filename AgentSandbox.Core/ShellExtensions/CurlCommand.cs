@@ -1,6 +1,7 @@
 using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 
 namespace AgentSandbox.Core.Shell.Extensions;
 
@@ -23,7 +24,7 @@ Usage: curl [options] <url>
 
 Options:
   -X, --request <method>   HTTP method (GET, POST, PUT, DELETE, PATCH)
-  -H, --header <header>    Add header (can be used multiple times)
+  -H, --header <header>    Add header (use secretRef:<ref> in Authorization values)
   -d, --data <data>        Request body data
   -o, --output <file>      Write output to file
   -s, --silent             Silent mode (no progress)
@@ -34,8 +35,11 @@ Options:
 Examples:
   curl https://api.example.com/data
   curl -X POST -H ""Content-Type: application/json"" -d '{""key"":""value""}' https://api.example.com
+  curl -H ""Authorization: Bearer secretRef:api-token"" https://api.example.com/data
   curl -o output.json https://api.example.com/data
   curl -i -L https://example.com";
+
+    private static readonly Regex SecretRefRegex = new(@"secretRef:([A-Za-z0-9._-]+)", RegexOptions.Compiled);
 
     public CurlCommand() : this(new HttpClient())
     {
@@ -68,6 +72,8 @@ Examples:
 
         try
         {
+            var resolvedSecrets = new HashSet<string>(StringComparer.Ordinal);
+            options = ResolveSecretReferences(options, context, resolvedSecrets);
             var response = ExecuteRequest(options).GetAwaiter().GetResult();
             
             var output = new StringBuilder();
@@ -89,7 +95,7 @@ Examples:
             var content = response.Content.ReadAsStringAsync().GetAwaiter().GetResult();
             output.Append(content);
 
-            var result = output.ToString();
+            var result = RedactResolvedSecrets(output.ToString(), resolvedSecrets);
 
             // Write to file if -o specified
             if (!string.IsNullOrEmpty(options.OutputFile))
@@ -236,6 +242,55 @@ Examples:
         }
 
         return options;
+    }
+
+    private static CurlOptions ResolveSecretReferences(CurlOptions options, IShellContext context, ISet<string> resolvedSecrets)
+    {
+        options.Url = ResolveSecretRefs(options.Url, context, resolvedSecrets);
+        if (!string.IsNullOrEmpty(options.Data))
+        {
+            options.Data = ResolveSecretRefs(options.Data, context, resolvedSecrets);
+        }
+
+        for (var i = 0; i < options.Headers.Count; i++)
+        {
+            options.Headers[i] = ResolveSecretRefs(options.Headers[i], context, resolvedSecrets);
+        }
+
+        return options;
+    }
+
+    private static string ResolveSecretRefs(string value, IShellContext context, ISet<string> resolvedSecrets)
+    {
+        return SecretRefRegex.Replace(value, match =>
+        {
+            var secretRef = match.Groups[1].Value;
+            if (!context.TryResolveSecret(secretRef, out var secretValue))
+            {
+                throw new InvalidOperationException($"unknown secretRef '{secretRef}'");
+            }
+
+            if (!string.IsNullOrEmpty(secretValue))
+            {
+                resolvedSecrets.Add(secretValue);
+            }
+
+            return secretValue;
+        });
+    }
+
+    private static string RedactResolvedSecrets(string value, IEnumerable<string> resolvedSecrets)
+    {
+        var redacted = value;
+        foreach (var secret in resolvedSecrets)
+        {
+            if (!string.IsNullOrEmpty(secret))
+            {
+                redacted = redacted.Replace(secret, "***REDACTED***", StringComparison.Ordinal);
+            }
+        }
+
+        return redacted;
     }
 
     private class CurlOptions
