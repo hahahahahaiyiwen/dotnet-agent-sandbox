@@ -27,7 +27,7 @@ public static class ServiceCollectionExtensions
         services.TryAddScoped<Sandbox>(sp =>
         {
             var manager = sp.GetRequiredService<SandboxManager>();
-            return manager.Create();
+            return manager.Get();
         });
 
         return services;
@@ -52,7 +52,7 @@ public static class ServiceCollectionExtensions
         services.TryAddScoped<Sandbox>(sp =>
         {
             var manager = sp.GetRequiredService<SandboxManager>();
-            return manager.Create();
+            return manager.Get();
         });
 
         return services;

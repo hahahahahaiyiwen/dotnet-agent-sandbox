@@ -475,28 +475,15 @@ var sandbox = new Sandbox("my-agent", options);
 var manager = new SandboxManager();
 
 // Create multiple isolated sandboxes
-var sandbox1 = manager.Create("agent-1");
-var sandbox2 = manager.Create("agent-2");
-
-// Get existing sandbox
-var existing = manager.Get("agent-1");
-
-// Get or create (idempotent)
-var sandbox = manager.GetOrCreate("agent-3");
-
-// List all active sandboxes
-foreach (var id in manager.List())
-{
-    var stats = manager.Get(id)?.GetStats();
-    Console.WriteLine($"{id}: {stats?.FileCount} files");
-}
-
-// Cleanup inactive sandboxes (default: 1 hour timeout)
-int cleaned = manager.CleanupInactive();
+var sandbox1 = manager.Get();
+var sandbox2 = manager.Get();
+var sandbox3 = manager.Get();
 
 // Destroy specific sandbox
-manager.Destroy("agent-1");
+sandbox1.Dispose();
 ```
+
+To enable automatic cleanup of inactive sandboxes, configure `SandboxManagerOptions.CleanupInterval` and `InactivityTimeout`.
 
 ## Use Cases
 

@@ -5,87 +5,76 @@ namespace AgentSandbox.Core;
 /// <summary>
 /// Manages multiple sandbox instances. Thread-safe singleton for server-side usage.
 /// </summary>
-public class SandboxManager
+public class SandboxManager : IDisposable
 {
     private readonly ConcurrentDictionary<string, Sandbox> _sandboxes = new();
     private readonly SandboxOptions _defaultOptions;
     private readonly TimeSpan _inactivityTimeout;
+    private readonly int? _maxActiveSandboxes;
+    private readonly object _sync = new();
+    private Timer? _cleanupTimer;
+    private bool _disposed;
 
     public SandboxManager(SandboxOptions? defaultOptions = null, TimeSpan? inactivityTimeout = null)
+        : this(defaultOptions, new SandboxManagerOptions
+        {
+            InactivityTimeout = inactivityTimeout ?? TimeSpan.FromHours(1)
+        })
+    {
+    }
+
+    public SandboxManager(SandboxOptions? defaultOptions, SandboxManagerOptions? managerOptions)
     {
         _defaultOptions = defaultOptions ?? new SandboxOptions();
-        _inactivityTimeout = inactivityTimeout ?? TimeSpan.FromHours(1);
+        var options = managerOptions ?? new SandboxManagerOptions();
+        _inactivityTimeout = options.InactivityTimeout;
+        _maxActiveSandboxes = options.MaxActiveSandboxes;
+
+        if (_maxActiveSandboxes.HasValue && _maxActiveSandboxes.Value <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(managerOptions), "MaxActiveSandboxes must be greater than zero.");
+        }
+
+        if (options.CleanupInterval.HasValue)
+        {
+            StartCleanupScheduler(options.CleanupInterval.Value);
+        }
     }
 
     /// <summary>
-    /// Creates a new sandbox instance.
+    /// Creates and returns a new sandbox instance.
     /// </summary>
-    public Sandbox Create(string? id = null, SandboxOptions? options = null)
+    public Sandbox Get(SandboxOptions? options = null)
     {
-        var sandbox = new Sandbox(id, options ?? _defaultOptions, OnSandboxDisposed);
-        
-        if (!_sandboxes.TryAdd(sandbox.Id, sandbox))
+        ThrowIfDisposed();
+        var sandbox = new Sandbox(null, options ?? _defaultOptions, OnSandboxDisposed);
+
+        lock (_sync)
         {
-            sandbox.Dispose();
-            throw new InvalidOperationException($"Sandbox with ID '{sandbox.Id}' already exists");
+            if (_sandboxes.ContainsKey(sandbox.Id))
+            {
+                sandbox.Dispose();
+                throw new InvalidOperationException($"Sandbox with ID '{sandbox.Id}' already exists");
+            }
+
+            EnsureCapacity();
+            _sandboxes[sandbox.Id] = sandbox;
         }
-        
+
         return sandbox;
     }
 
     /// <summary>
-    /// Gets an existing sandbox by ID.
-    /// </summary>
-    public Sandbox? Get(string id)
-    {
-        return _sandboxes.TryGetValue(id, out var sandbox) ? sandbox : null;
-    }
-
-    /// <summary>
-    /// Gets or creates a sandbox with the given ID.
-    /// </summary>
-    public Sandbox GetOrCreate(string id, SandboxOptions? options = null)
-    {
-        return _sandboxes.GetOrAdd(id, _ => new Sandbox(id, options ?? _defaultOptions, OnSandboxDisposed));
-    }
-
-    /// <summary>
-    /// Destroys a sandbox and releases its resources.
-    /// </summary>
-    public bool Destroy(string id)
-    {
-        if (_sandboxes.TryRemove(id, out var sandbox))
-        {
-            sandbox.Dispose();
-            return true;
-        }
-        return false;
-    }
-
-    /// <summary>
-    /// Called when a sandbox is disposed directly (not via Destroy).
+    /// Called when a sandbox is disposed directly.
     /// </summary>
     private void OnSandboxDisposed(string id)
     {
         _sandboxes.TryRemove(id, out _);
     }
 
-    /// <summary>
-    /// Lists all active sandbox IDs.
-    /// </summary>
-    public IEnumerable<string> List() => _sandboxes.Keys;
-
-    /// <summary>
-    /// Gets statistics for all sandboxes.
-    /// </summary>
-    public IEnumerable<SandboxStats> GetAllStats() => 
-        _sandboxes.Values.Select(s => s.GetStats());
-
-    /// <summary>
-    /// Cleans up inactive sandboxes.
-    /// </summary>
-    public int CleanupInactive()
+    private int CleanupInactive()
     {
+        ThrowIfDisposed();
         var cutoff = DateTime.UtcNow - _inactivityTimeout;
         var toRemove = _sandboxes
             .Where(kvp => kvp.Value.LastActivityAt < cutoff)
@@ -94,14 +83,87 @@ public class SandboxManager
 
         foreach (var id in toRemove)
         {
-            Destroy(id);
+            RemoveAndDispose(id);
         }
 
         return toRemove.Count;
     }
 
-    /// <summary>
-    /// Gets total count of active sandboxes.
-    /// </summary>
-    public int Count => _sandboxes.Count;
+    private void StartCleanupScheduler(TimeSpan interval)
+    {
+        ThrowIfDisposed();
+        if (interval <= TimeSpan.Zero)
+        {
+            throw new ArgumentOutOfRangeException(nameof(interval), interval, "Cleanup interval must be greater than zero.");
+        }
+
+        lock (_sync)
+        {
+            _cleanupTimer?.Dispose();
+            _cleanupTimer = new Timer(CleanupTimerCallback, null, interval, interval);
+        }
+    }
+
+    private void CleanupTimerCallback(object? _)
+    {
+        try
+        {
+            CleanupInactive();
+        }
+        catch (ObjectDisposedException)
+        {
+            StopCleanupScheduler();
+        }
+    }
+
+    private void StopCleanupScheduler()
+    {
+        lock (_sync)
+        {
+            _cleanupTimer?.Dispose();
+            _cleanupTimer = null;
+        }
+    }
+
+    private void EnsureCapacity()
+    {
+        if (_maxActiveSandboxes.HasValue && _sandboxes.Count >= _maxActiveSandboxes.Value)
+        {
+            throw new InvalidOperationException($"Maximum active sandboxes limit ({_maxActiveSandboxes.Value}) reached");
+        }
+    }
+
+    private void ThrowIfDisposed()
+    {
+        if (_disposed)
+        {
+            throw new ObjectDisposedException(nameof(SandboxManager));
+        }
+    }
+
+    public void Dispose()
+    {
+        if (_disposed)
+        {
+            return;
+        }
+
+        StopCleanupScheduler();
+
+        foreach (var id in _sandboxes.Keys.ToList())
+        {
+            RemoveAndDispose(id);
+        }
+
+        _disposed = true;
+        GC.SuppressFinalize(this);
+    }
+
+    private void RemoveAndDispose(string id)
+    {
+        if (_sandboxes.TryRemove(id, out var sandbox))
+        {
+            sandbox.Dispose();
+        }
+    }
 }

@@ -128,7 +128,19 @@ public class Sandbox : IDisposable, IObservableSandbox
 
         try
         {
-            var result = _shell.Execute(command);
+            var executionTask = Task.Run(() => _shell.Execute(command));
+            if (!executionTask.Wait(_options.CommandTimeout))
+            {
+                stopwatch.Stop();
+                var timeoutResult = ShellResult.Error($"Command execution timed out after {_options.CommandTimeout.TotalMilliseconds} ms.");
+                timeoutResult.Command = command;
+                timeoutResult.Duration = stopwatch.Elapsed;
+                _commandHistory.Add(timeoutResult);
+                _telemetry.RecordCommandError(new TimeoutException(timeoutResult.Stderr));
+                return timeoutResult;
+            }
+
+            var result = executionTask.GetAwaiter().GetResult();
             result = _shell.RedactSecrets(result);
             _commandHistory.Add(result);
             stopwatch.Stop();
