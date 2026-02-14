@@ -6,124 +6,95 @@ namespace AgentSandbox.Tests;
 public class SandboxManagerTests
 {
     [Fact]
-    public void Create_ReturnsSandboxWithId()
+    public void Get_ReturnsSandboxWithId()
     {
         var manager = new SandboxManager();
-        
-        var sandbox = manager.Create();
-        
+
+        var sandbox = manager.Get();
+
         Assert.NotNull(sandbox);
         Assert.NotEmpty(sandbox.Id);
     }
 
     [Fact]
-    public void Create_WithCustomId_UsesProvidedId()
+    public void Get_CreatesNewSandboxEachCall()
     {
         var manager = new SandboxManager();
-        
-        var sandbox = manager.Create("my-sandbox");
-        
-        Assert.Equal("my-sandbox", sandbox.Id);
+
+        var first = manager.Get();
+        var second = manager.Get();
+
+        Assert.NotEqual(first.Id, second.Id);
     }
 
     [Fact]
-    public void Create_DuplicateId_Throws()
+    public void Get_TracksCreatedSandboxInList()
     {
         var manager = new SandboxManager();
-        manager.Create("test-id");
-        
-        Assert.Throws<InvalidOperationException>(() => manager.Create("test-id"));
+
+        var sandbox = manager.Get();
+
+        Assert.Contains(manager.List(), s => s.Id == sandbox.Id);
     }
 
     [Fact]
-    public void Get_ReturnsExistingSandbox()
+    public void DisposeSandbox_RemovesFromList()
     {
         var manager = new SandboxManager();
-        var created = manager.Create("test");
-        
-        var retrieved = manager.Get("test");
-        
-        Assert.Same(created, retrieved);
-    }
+        var sandbox = manager.Get();
 
-    [Fact]
-    public void Get_ReturnsNullForNonexistent()
-    {
-        var manager = new SandboxManager();
-        
-        var result = manager.Get("nonexistent");
-        
-        Assert.Null(result);
-    }
+        sandbox.Dispose();
 
-    [Fact]
-    public void GetOrCreate_CreatesIfNotExists()
-    {
-        var manager = new SandboxManager();
-        
-        var sandbox = manager.GetOrCreate("new-sandbox");
-        
-        Assert.NotNull(sandbox);
-        Assert.Equal("new-sandbox", sandbox.Id);
-    }
-
-    [Fact]
-    public void GetOrCreate_WhenSandboxExists_Throws()
-    {
-        var manager = new SandboxManager();
-        manager.Create("existing");
-        
-        var ex = Assert.Throws<InvalidOperationException>(() => manager.GetOrCreate("existing"));
-        
-        Assert.Contains("already exists", ex.Message);
+        Assert.DoesNotContain(manager.List(), s => s.Id == sandbox.Id);
+        Assert.Equal(0, manager.Count);
     }
 
     [Fact]
     public void Destroy_RemovesSandbox()
     {
         var manager = new SandboxManager();
-        manager.Create("to-delete");
-        
-        var result = manager.Destroy("to-delete");
-        
+        var sandbox = manager.Get();
+
+        var result = manager.Destroy(sandbox.Id);
+
         Assert.True(result);
-        Assert.Null(manager.Get("to-delete"));
+        Assert.DoesNotContain(manager.List(), s => s.Id == sandbox.Id);
     }
 
     [Fact]
     public void Destroy_ReturnsFalseForNonexistent()
     {
         var manager = new SandboxManager();
-        
+
         var result = manager.Destroy("nonexistent");
-        
+
         Assert.False(result);
     }
 
     [Fact]
-    public void List_ReturnsAllSandboxIds()
+    public void List_ReturnsAllActiveSandboxes()
     {
         var manager = new SandboxManager();
-        manager.Create("sandbox1");
-        manager.Create("sandbox2");
-        manager.Create("sandbox3");
-        
-        var ids = manager.List().ToList();
-        
-        Assert.Equal(3, ids.Count);
-        Assert.Contains("sandbox1", ids);
-        Assert.Contains("sandbox2", ids);
-        Assert.Contains("sandbox3", ids);
+        var sandbox1 = manager.Get();
+        var sandbox2 = manager.Get();
+        var sandbox3 = manager.Get();
+
+        var sandboxes = manager.List().ToList();
+
+        Assert.Equal(3, sandboxes.Count);
+        Assert.Contains(sandboxes, s => s.Id == sandbox1.Id);
+        Assert.Contains(sandboxes, s => s.Id == sandbox2.Id);
+        Assert.Contains(sandboxes, s => s.Id == sandbox3.Id);
     }
 
     [Fact]
     public void Execute_RunsCommandAndReturnsResult()
     {
         var manager = new SandboxManager();
-        var sandbox = manager.Create();
-        
+        var sandbox = manager.Get();
+
         var result = sandbox.Execute("echo Hello");
-        
+
         Assert.True(result.Success);
         Assert.Equal("Hello", result.Stdout);
     }
@@ -133,11 +104,10 @@ public class SandboxManagerTests
     {
         var options = new SandboxOptions { MaxFileSize = 10 };
         var manager = new SandboxManager(options);
-        var sandbox = manager.Create();
-        
-        // Writing via shell command - should fail due to size limit
+        var sandbox = manager.Get();
+
         var result = sandbox.Execute($"echo '{new string('x', 100)}' > /large.txt");
-        
+
         Assert.False(result.Success, $"Expected failure but got success. Stdout: {result.Stdout}, Stderr: {result.Stderr}");
         Assert.Contains("exceeds", result.Stderr.ToLower());
     }
@@ -146,15 +116,15 @@ public class SandboxManagerTests
     public void Snapshot_And_Restore_PreservesState()
     {
         var manager = new SandboxManager();
-        var sandbox = manager.Create();
-        
+        var sandbox = manager.Get();
+
         sandbox.Execute("echo 'original' > /file.txt");
         var snapshot = sandbox.CreateSnapshot();
-        
+
         sandbox.Execute("echo 'modified' > /file.txt");
         var modifiedResult = sandbox.Execute("cat /file.txt");
         Assert.Equal("modified", modifiedResult.Stdout.Trim());
-        
+
         sandbox.RestoreSnapshot(snapshot);
         var restoredResult = sandbox.Execute("cat /file.txt");
         Assert.Equal("original", restoredResult.Stdout.Trim());
@@ -164,54 +134,28 @@ public class SandboxManagerTests
     public void GetStats_ReturnsCorrectStats()
     {
         var manager = new SandboxManager();
-        var sandbox = manager.Create("stats-test");
-        
+        var sandbox = manager.Get();
+
         sandbox.Execute("mkdir /dir");
         sandbox.Execute("echo 'content' > /file.txt");
         sandbox.Execute("ls");
-        
+
         var stats = sandbox.GetStats();
-        
-        Assert.Equal("stats-test", stats.Id);
-        Assert.Equal(3, stats.FileCount); // root + dir + file
+
+        Assert.Equal(sandbox.Id, stats.Id);
+        Assert.Equal(3, stats.FileCount);
         Assert.True(stats.CommandCount >= 3);
     }
 
     [Fact]
-    public void Create_WhenMaxActiveSandboxesReached_Throws()
+    public void Get_WhenMaxActiveSandboxesReached_Throws()
     {
         var manager = new SandboxManager(
             defaultOptions: null,
             managerOptions: new SandboxManagerOptions { MaxActiveSandboxes = 1 });
-        manager.Create("first");
+        manager.Get();
 
-        var ex = Assert.Throws<InvalidOperationException>(() => manager.Create("second"));
-
-        Assert.Contains("Maximum active sandboxes limit", ex.Message);
-    }
-
-    [Fact]
-    public void GetOrCreate_WhenAtCapacityForExistingSandbox_Throws()
-    {
-        var manager = new SandboxManager(
-            defaultOptions: null,
-            managerOptions: new SandboxManagerOptions { MaxActiveSandboxes = 1 });
-        manager.Create("existing");
-
-        var ex = Assert.Throws<InvalidOperationException>(() => manager.GetOrCreate("existing"));
-
-        Assert.Contains("already exists", ex.Message);
-    }
-
-    [Fact]
-    public void GetOrCreate_WhenAtCapacityForNewSandbox_Throws()
-    {
-        var manager = new SandboxManager(
-            defaultOptions: null,
-            managerOptions: new SandboxManagerOptions { MaxActiveSandboxes = 1 });
-        manager.Create("first");
-
-        var ex = Assert.Throws<InvalidOperationException>(() => manager.GetOrCreate("second"));
+        var ex = Assert.Throws<InvalidOperationException>(() => manager.Get());
 
         Assert.Contains("Maximum active sandboxes limit", ex.Message);
     }
@@ -226,9 +170,11 @@ public class SandboxManagerTests
                 InactivityTimeout = TimeSpan.FromMilliseconds(30),
                 CleanupInterval = TimeSpan.FromMilliseconds(20)
             });
-        manager.Create("temp");
+        var sandbox = manager.Get();
 
-        var cleaned = SpinWait.SpinUntil(() => manager.Get("temp") is null, TimeSpan.FromSeconds(2));
+        var cleaned = SpinWait.SpinUntil(
+            () => !manager.List().Any(s => s.Id == sandbox.Id),
+            TimeSpan.FromSeconds(2));
 
         Assert.True(cleaned);
     }
@@ -242,7 +188,7 @@ public class SandboxManagerTests
             ShellExtensions = [new SlowCommand()]
         };
         var manager = new SandboxManager(options);
-        var sandbox = manager.Create();
+        var sandbox = manager.Get();
 
         var result = sandbox.Execute("slow 200");
 

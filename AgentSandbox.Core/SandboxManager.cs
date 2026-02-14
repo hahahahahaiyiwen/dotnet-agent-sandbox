@@ -42,12 +42,12 @@ public class SandboxManager : IDisposable
     }
 
     /// <summary>
-    /// Creates a new sandbox instance.
+    /// Creates and returns a new sandbox instance.
     /// </summary>
-    public Sandbox Create(string? id = null, SandboxOptions? options = null)
+    public Sandbox Get(SandboxOptions? options = null)
     {
         ThrowIfDisposed();
-        var sandbox = new Sandbox(id, options ?? _defaultOptions, OnSandboxDisposed);
+        var sandbox = new Sandbox(null, options ?? _defaultOptions, OnSandboxDisposed);
 
         lock (_sync)
         {
@@ -62,22 +62,6 @@ public class SandboxManager : IDisposable
         }
 
         return sandbox;
-    }
-
-    /// <summary>
-    /// Gets an existing sandbox by ID.
-    /// </summary>
-    public Sandbox? Get(string id)
-    {
-        return _sandboxes.TryGetValue(id, out var sandbox) ? sandbox : null;
-    }
-
-    /// <summary>
-    /// Creates a sandbox with the given ID.
-    /// </summary>
-    public Sandbox GetOrCreate(string id, SandboxOptions? options = null)
-    {
-        return Create(id, options);
     }
 
     /// <summary>
@@ -102,9 +86,9 @@ public class SandboxManager : IDisposable
     }
 
     /// <summary>
-    /// Lists all active sandbox IDs.
+    /// Lists all active sandboxes.
     /// </summary>
-    public IEnumerable<string> List() => _sandboxes.Keys;
+    public IEnumerable<Sandbox> List() => _sandboxes.Values;
 
     /// <summary>
     /// Gets statistics for all sandboxes.
