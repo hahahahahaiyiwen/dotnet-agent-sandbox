@@ -100,8 +100,8 @@ else
 }
 
 // Use dedicated File I/O tools (safer, with line-range support)
-var content = sandbox.ReadFile("/workspace/src/app.js");                      // Read entire file
-var lines = sandbox.ReadFile("/workspace/src/app.js", startLine: 0, endLine: 10); // Read specific lines
+var content = string.Join("\n", sandbox.ReadFileLines("/workspace/src/app.js")); // Read entire file
+var lines = string.Join("\n", sandbox.ReadFileLines("/workspace/src/app.js", startLine: 1, endLine: 11)); // Read specific lines
 
 sandbox.WriteFile("/workspace/data.json", "{\"status\": \"active\"}");        // Create file
 sandbox.ApplyPatch("/workspace/src/app.js", unifiedDiff);                     // Apply unified diff
