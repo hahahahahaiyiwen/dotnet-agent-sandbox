@@ -1,5 +1,6 @@
 using AgentSandbox.Api.Models;
 using AgentSandbox.Core;
+using AgentSandbox.Core.Validation;
 using Microsoft.AspNetCore.Mvc;
 
 namespace AgentSandbox.Api.Endpoints;
@@ -143,16 +144,23 @@ public static class SandboxEndpoints
         if (sandbox == null)
             return Results.NotFound(new ErrorResponse($"Sandbox '{id}' not found", 404));
 
-        var result = sandbox.Execute(request.Command);
+        try
+        {
+            var result = sandbox.Execute(request.Command);
 
-        return Results.Ok(new CommandResponse(
-            result.Command,
-            result.Stdout,
-            result.Stderr,
-            result.ExitCode,
-            result.Success,
-            result.Duration.TotalMilliseconds
-        ));
+            return Results.Ok(new CommandResponse(
+                result.Command,
+                result.Stdout,
+                result.Stderr,
+                result.ExitCode,
+                result.Success,
+                result.Duration.TotalMilliseconds
+            ));
+        }
+        catch (CoreValidationException ex)
+        {
+            return Results.BadRequest(new ErrorResponse(ex.Message, 400, ex.ErrorCode));
+        }
     }
 
     private static IResult GetHistory(string id, [FromServices] SandboxManager manager)
@@ -185,17 +193,21 @@ public static class SandboxEndpoints
 
         try
         {
-            var result = sandbox.Execute($"cat \"{path}\"");
-            if (!result.Success)
-            {
-                return Results.NotFound(new ErrorResponse($"File '{path}' not found", 404));
-            }
-            
+            var content = sandbox.ReadFile(path);
+
             return Results.Ok(new FileContentResponse(
                 path,
-                result.Stdout,
-                System.Text.Encoding.UTF8.GetByteCount(result.Stdout)
+                content,
+                System.Text.Encoding.UTF8.GetByteCount(content)
             ));
+        }
+        catch (FileNotFoundException)
+        {
+            return Results.NotFound(new ErrorResponse($"File '{path}' not found", 404));
+        }
+        catch (CoreValidationException ex)
+        {
+            return Results.BadRequest(new ErrorResponse(ex.Message, 400, ex.ErrorCode));
         }
         catch (Exception ex)
         {
@@ -214,16 +226,12 @@ public static class SandboxEndpoints
 
         try
         {
-            // Escape content for echo command
-            var escapedContent = request.Content.Replace("'", "'\\''");
-            var result = sandbox.Execute($"echo '{escapedContent}' > \"{request.Path}\"");
-            
-            if (!result.Success)
-            {
-                return Results.BadRequest(new ErrorResponse(result.Stderr, 400));
-            }
-            
+            sandbox.WriteFile(request.Path, request.Content);
             return Results.Ok(new { path = request.Path, success = true });
+        }
+        catch (CoreValidationException ex)
+        {
+            return Results.BadRequest(new ErrorResponse(ex.Message, 400, ex.ErrorCode));
         }
         catch (Exception ex)
         {
