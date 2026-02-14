@@ -68,14 +68,14 @@ public class SandboxManagerTests
     }
 
     [Fact]
-    public void GetOrCreate_ReturnsExistingIfExists()
+    public void GetOrCreate_WhenSandboxExists_Throws()
     {
         var manager = new SandboxManager();
-        var first = manager.Create("existing");
+        manager.Create("existing");
         
-        var second = manager.GetOrCreate("existing");
+        var ex = Assert.Throws<InvalidOperationException>(() => manager.GetOrCreate("existing"));
         
-        Assert.Same(first, second);
+        Assert.Contains("already exists", ex.Message);
     }
 
     [Fact]
@@ -191,16 +191,16 @@ public class SandboxManagerTests
     }
 
     [Fact]
-    public void GetOrCreate_WhenAtCapacityForExistingSandbox_ReturnsExisting()
+    public void GetOrCreate_WhenAtCapacityForExistingSandbox_Throws()
     {
         var manager = new SandboxManager(
             defaultOptions: null,
             managerOptions: new SandboxManagerOptions { MaxActiveSandboxes = 1 });
-        var first = manager.Create("existing");
+        manager.Create("existing");
 
-        var existing = manager.GetOrCreate("existing");
+        var ex = Assert.Throws<InvalidOperationException>(() => manager.GetOrCreate("existing"));
 
-        Assert.Same(first, existing);
+        Assert.Contains("already exists", ex.Message);
     }
 
     [Fact]

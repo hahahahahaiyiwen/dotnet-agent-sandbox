@@ -481,7 +481,7 @@ var sandbox2 = manager.Create("agent-2");
 // Get existing sandbox
 var existing = manager.Get("agent-1");
 
-// Get or create (idempotent)
+// GetOrCreate creates and fails if the ID already exists
 var sandbox = manager.GetOrCreate("agent-3");
 
 // List all active sandboxes

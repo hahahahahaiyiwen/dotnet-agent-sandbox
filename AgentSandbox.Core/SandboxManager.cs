@@ -73,29 +73,11 @@ public class SandboxManager : IDisposable
     }
 
     /// <summary>
-    /// Gets or creates a sandbox with the given ID.
+    /// Creates a sandbox with the given ID.
     /// </summary>
     public Sandbox GetOrCreate(string id, SandboxOptions? options = null)
     {
-        ThrowIfDisposed();
-        if (_sandboxes.TryGetValue(id, out var existing))
-        {
-            return existing;
-        }
-
-        var sandbox = new Sandbox(id, options ?? _defaultOptions, OnSandboxDisposed);
-        lock (_sync)
-        {
-            if (_sandboxes.TryGetValue(id, out existing))
-            {
-                sandbox.Dispose();
-                return existing;
-            }
-
-            EnsureCapacity();
-            _sandboxes[id] = sandbox;
-            return sandbox;
-        }
+        return Create(id, options);
     }
 
     /// <summary>
