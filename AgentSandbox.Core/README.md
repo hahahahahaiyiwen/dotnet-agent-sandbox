@@ -2,6 +2,34 @@
 
 A lightweight, in-memory virtual filesystem and shell for AI agents. Zero external dependencies.
 
+## Foundational Principles
+1. **Only 4 core agent APIs**:
+   - `Execute(command)` for shell execution
+   - `ReadFileLines(path, startLine?, endLine?)` for structured line-range reads
+   - `WriteFile(path, content)` for atomic full-file writes
+   - `ApplyPatch(path, patch)` for incremental context-aware edits
+2. **One agent-session = one sandbox instance**:
+   - Single-threaded ownership model by design
+   - No shared mutable runtime within a session, so no thread-safety coordination in the sandbox core
+3. **Cross-session state transition via snapshots**:
+   - Session handoff and recovery are done through snapshot create/restore
+   - Filesystem, working directory, and environment state are portable checkpoint data
+
+## Current Scope vs Direction
+- **Direction**: keep the agent-facing contract centered on the 4 core APIs above.
+- **Current scope**: implementation also includes orchestration and integration surfaces (e.g., `SandboxManager`, REST endpoints, DI, observability, skills/importing).
+
+## Snapshot Semantics
+- Snapshot/restore is the required cross-session state transition mechanism.
+- Snapshot captures filesystem, working directory, and environment.
+
+## Non-goals / Constraints
+- Shell intentionally does not support pipes, command chaining (`&&`, `||`, `;`), or stdin redirection.
+- Sandbox internals are single-threaded by design; concurrency is handled by separate sandbox instances at orchestration level.
+
+## Design Outcome
+The system optimizes for simplicity, correctness, and reproducibility over broad API surface area: agents get just enough primitives to work effectively, and orchestration-level continuity is handled explicitly via snapshot-based state transfer.
+
 ## Installation
 
 ```bash
