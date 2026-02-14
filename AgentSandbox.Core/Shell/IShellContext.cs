@@ -32,6 +32,10 @@ public interface IShellContext
     /// Resolves a secret reference to its value using host-provided broker.
     /// Returns false when the reference cannot be resolved.
     /// </summary>
+    /// <remarks>
+    /// Callers must treat resolved values as sensitive and avoid logging or persisting them.
+    /// Implementations may track resolved values for output redaction.
+    /// </remarks>
     bool TryResolveSecret(string secretRef, out string secretValue);
 
     /// <summary>

@@ -150,6 +150,31 @@ public class CurlCommandTests
         Assert.Contains("unknown secretRef 'missing'", result.Stderr);
     }
 
+    [Fact]
+    public void Curl_WithMultipleSecretRefsAcrossFields_ResolvesAllSecrets()
+    {
+        var handler = new MockHttpMessageHandler("OK", HttpStatusCode.OK);
+        var httpClient = new HttpClient(handler);
+        var broker = new TestSecretBroker(new Dictionary<string, string>
+        {
+            ["api-token"] = "super-secret-token",
+            ["query_secret"] = "query-value",
+            ["api.token"] = "dot-value"
+        });
+        var shell = new SandboxShell(_fs, broker);
+        shell.RegisterCommand(new CurlCommand(httpClient));
+
+        var result = shell.Execute(
+            "curl -H \"Authorization: Bearer secretRef:api-token\" " +
+            "\"http://example.com/api?key=secretRef:query_secret\" " +
+            "-d \"code=secretRef:api.token\"");
+
+        Assert.True(result.Success);
+        Assert.Equal("Bearer super-secret-token", handler.LastRequest?.Headers.GetValues("Authorization").First());
+        Assert.Equal("http://example.com/api?key=query-value", handler.LastRequest?.RequestUri?.ToString());
+        Assert.Equal("code=dot-value", handler.LastRequestBody);
+    }
+
     #endregion
 
     #region Data/Body Tests
@@ -199,6 +224,27 @@ public class CurlCommandTests
         var responseBytes = _fs.ReadFileBytes("/response.json");
         var response = Encoding.UTF8.GetString(responseBytes);
         Assert.Equal("{\"data\": \"value\"}", response);
+    }
+
+    [Fact]
+    public void Curl_WithOutputFile_RedactsResolvedSecretsBeforePersisting()
+    {
+        var handler = new MockHttpMessageHandler("echo:super-secret-token", HttpStatusCode.OK);
+        var httpClient = new HttpClient(handler);
+        var broker = new TestSecretBroker(new Dictionary<string, string>
+        {
+            ["api-token"] = "super-secret-token"
+        });
+        var shell = new SandboxShell(_fs, broker);
+        shell.RegisterCommand(new CurlCommand(httpClient));
+
+        var result = shell.Execute("curl -o /response.txt -H \"Authorization: Bearer secretRef:api-token\" http://example.com/api");
+
+        Assert.True(result.Success);
+        var responseBytes = _fs.ReadFileBytes("/response.txt");
+        var response = Encoding.UTF8.GetString(responseBytes);
+        Assert.DoesNotContain("super-secret-token", response);
+        Assert.Contains("***REDACTED***", response);
     }
 
     [Fact]

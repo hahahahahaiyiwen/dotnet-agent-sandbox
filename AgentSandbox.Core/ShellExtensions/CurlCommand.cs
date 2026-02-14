@@ -24,13 +24,12 @@ Usage: curl [options] <url>
 
 Options:
   -X, --request <method>   HTTP method (GET, POST, PUT, DELETE, PATCH)
-  -H, --header <header>    Add header (can be used multiple times)
+  -H, --header <header>    Add header (use secretRef:<ref> in Authorization values)
   -d, --data <data>        Request body data
   -o, --output <file>      Write output to file
   -s, --silent             Silent mode (no progress)
   -i, --include            Include response headers in output
   -L, --location           Follow redirects
-  --secret-ref <ref>       Resolve secret reference (usable as secretRef:<ref>)
   -h, --help               Show this help message
 
 Examples:
@@ -73,7 +72,8 @@ Examples:
 
         try
         {
-            options = ResolveSecretReferences(options, context);
+            var resolvedSecrets = new HashSet<string>(StringComparer.Ordinal);
+            options = ResolveSecretReferences(options, context, resolvedSecrets);
             var response = ExecuteRequest(options).GetAwaiter().GetResult();
             
             var output = new StringBuilder();
@@ -95,7 +95,7 @@ Examples:
             var content = response.Content.ReadAsStringAsync().GetAwaiter().GetResult();
             output.Append(content);
 
-            var result = output.ToString();
+            var result = RedactResolvedSecrets(output.ToString(), resolvedSecrets);
 
             // Write to file if -o specified
             if (!string.IsNullOrEmpty(options.OutputFile))
@@ -244,23 +244,23 @@ Examples:
         return options;
     }
 
-    private static CurlOptions ResolveSecretReferences(CurlOptions options, IShellContext context)
+    private static CurlOptions ResolveSecretReferences(CurlOptions options, IShellContext context, ISet<string> resolvedSecrets)
     {
-        options.Url = ResolveSecretRefs(options.Url, context);
+        options.Url = ResolveSecretRefs(options.Url, context, resolvedSecrets);
         if (!string.IsNullOrEmpty(options.Data))
         {
-            options.Data = ResolveSecretRefs(options.Data, context);
+            options.Data = ResolveSecretRefs(options.Data, context, resolvedSecrets);
         }
 
         for (var i = 0; i < options.Headers.Count; i++)
         {
-            options.Headers[i] = ResolveSecretRefs(options.Headers[i], context);
+            options.Headers[i] = ResolveSecretRefs(options.Headers[i], context, resolvedSecrets);
         }
 
         return options;
     }
 
-    private static string ResolveSecretRefs(string value, IShellContext context)
+    private static string ResolveSecretRefs(string value, IShellContext context, ISet<string> resolvedSecrets)
     {
         return SecretRefRegex.Replace(value, match =>
         {
@@ -270,8 +270,27 @@ Examples:
                 throw new InvalidOperationException($"unknown secretRef '{secretRef}'");
             }
 
+            if (!string.IsNullOrEmpty(secretValue))
+            {
+                resolvedSecrets.Add(secretValue);
+            }
+
             return secretValue;
         });
+    }
+
+    private static string RedactResolvedSecrets(string value, IEnumerable<string> resolvedSecrets)
+    {
+        var redacted = value;
+        foreach (var secret in resolvedSecrets)
+        {
+            if (!string.IsNullOrEmpty(secret))
+            {
+                redacted = redacted.Replace(secret, "***REDACTED***", StringComparison.Ordinal);
+            }
+        }
+
+        return redacted;
     }
 
     private class CurlOptions

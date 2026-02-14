@@ -52,6 +52,10 @@ public class SandboxOptions
     /// <summary>
     /// Host-managed secret broker for resolving secret references at execution time.
     /// </summary>
+    /// <remarks>
+    /// Secrets are resolved just-in-time by shell commands and should never be logged or persisted by broker implementations.
+    /// Keep resolved secret lifetime short and scope broker access to the minimum needed for the sandbox session.
+    /// </remarks>
     public ISecretBroker? SecretBroker { get; set; }
 
     /// <summary>
