@@ -3,6 +3,7 @@ using AgentSandbox.Core.Importing;
 using AgentSandbox.Core.Shell;
 using AgentSandbox.Core.Skills;
 using AgentSandbox.Core.Telemetry;
+using AgentSandbox.Core.Validation;
 using System.Diagnostics;
 using System.Text;
 
@@ -74,6 +75,7 @@ public class Sandbox : IDisposable, IObservableSandbox
         // Set initial working directory
         if (_options.WorkingDirectory != "/")
         {
+            ValidatePathInput(_options.WorkingDirectory, nameof(_options.WorkingDirectory));
             _fileSystem.CreateDirectory(_options.WorkingDirectory);
             _shell.Execute($"cd {_options.WorkingDirectory}");
         }
@@ -118,6 +120,7 @@ public class Sandbox : IDisposable, IObservableSandbox
     {
         ThrowIfDisposed();
         LastActivityAt = DateTime.UtcNow;
+        ValidateCommandInput(command);
 
         var stopwatch = Stopwatch.StartNew();
         var activity = _telemetry.StartCommandActivity(command);
@@ -186,6 +189,7 @@ public class Sandbox : IDisposable, IObservableSandbox
     {
         ThrowIfDisposed();
         LastActivityAt = DateTime.UtcNow;
+        ValidatePathInput(path);
         
         var stopwatch = Stopwatch.StartNew();
         var activity = _telemetry.StartReadFileActivity(path);
@@ -230,6 +234,8 @@ public class Sandbox : IDisposable, IObservableSandbox
     {
         ThrowIfDisposed();
         LastActivityAt = DateTime.UtcNow;
+        ValidatePathInput(path);
+        ValidateWritePayloadInput(content);
 
         var stopwatch = Stopwatch.StartNew();
         var activity = _telemetry.StartWriteFileActivity(path);
@@ -265,6 +271,7 @@ public class Sandbox : IDisposable, IObservableSandbox
     {
         ThrowIfDisposed();
         LastActivityAt = DateTime.UtcNow;
+        ValidatePathInput(path);
 
         var stopwatch = Stopwatch.StartNew();
         var activity = _telemetry.StartApplyPatchActivity(path);
@@ -394,6 +401,49 @@ public class Sandbox : IDisposable, IObservableSandbox
     #endregion
 
     #region Skill Management
+
+    private void ValidateCommandInput(string command)
+    {
+        if (command is null)
+        {
+            throw new ArgumentNullException(nameof(command));
+        }
+
+        var byteCount = Encoding.UTF8.GetByteCount(command);
+        if (byteCount > _options.MaxCommandLength)
+        {
+            throw CoreValidationException.CommandTooLong(byteCount, _options.MaxCommandLength);
+        }
+    }
+
+    private void ValidateWritePayloadInput(string content)
+    {
+        if (content is null)
+        {
+            throw new ArgumentNullException(nameof(content));
+        }
+
+        var byteCount = Encoding.UTF8.GetByteCount(content);
+        if (byteCount > _options.MaxWritePayloadBytes)
+        {
+            throw CoreValidationException.WritePayloadTooLarge(byteCount, _options.MaxWritePayloadBytes);
+        }
+    }
+
+    private static void ValidatePathInput(string path, string paramName = "path")
+    {
+        if (string.IsNullOrEmpty(path))
+        {
+            throw new ArgumentNullException(paramName);
+        }
+
+        var normalized = path.Replace('\\', '/');
+        var segments = normalized.Split('/', StringSplitOptions.RemoveEmptyEntries);
+        if (segments.Any(static segment => segment == ".."))
+        {
+            throw CoreValidationException.PathTraversalDetected(paramName);
+        }
+    }
 
     /// <summary>
     /// Gets information about all loaded skills.

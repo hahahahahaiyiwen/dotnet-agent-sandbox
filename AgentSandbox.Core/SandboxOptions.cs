@@ -11,6 +11,9 @@ namespace AgentSandbox.Core;
 /// </summary>
 public class SandboxOptions
 {
+    private int _maxCommandLength = 8 * 1024;
+    private int _maxWritePayloadBytes = 100 * 1024;
+
     /// <summary>Maximum total size of all files in bytes (default: 5MB).</summary>
     public long MaxTotalSize { get; set; } = 5 * 1024 * 1024;
     
@@ -22,6 +25,36 @@ public class SandboxOptions
     
     /// <summary>Command execution timeout (default: 30 seconds).</summary>
     public TimeSpan CommandTimeout { get; set; } = TimeSpan.FromSeconds(30);
+
+    /// <summary>Maximum UTF-8 payload size for Execute command input in bytes (default: 8KB).</summary>
+    public int MaxCommandLength
+    {
+        get => _maxCommandLength;
+        set
+        {
+            if (value <= 0)
+            {
+                throw new ArgumentOutOfRangeException(nameof(MaxCommandLength), value, "MaxCommandLength must be a positive value.");
+            }
+
+            _maxCommandLength = value;
+        }
+    }
+
+    /// <summary>Maximum UTF-8 payload size for WriteFile content input in bytes (default: 100KB).</summary>
+    public int MaxWritePayloadBytes
+    {
+        get => _maxWritePayloadBytes;
+        set
+        {
+            if (value <= 0)
+            {
+                throw new ArgumentOutOfRangeException(nameof(MaxWritePayloadBytes), value, "MaxWritePayloadBytes must be a positive value.");
+            }
+
+            _maxWritePayloadBytes = value;
+        }
+    }
     
     /// <summary>Initial environment variables.</summary>
     public Dictionary<string, string> Environment { get; set; } = new();
@@ -67,6 +100,8 @@ public class SandboxOptions
         MaxFileSize = MaxFileSize,
         MaxNodeCount = MaxNodeCount,
         CommandTimeout = CommandTimeout,
+        MaxCommandLength = MaxCommandLength,
+        MaxWritePayloadBytes = MaxWritePayloadBytes,
         Environment = new Dictionary<string, string>(Environment),
         WorkingDirectory = WorkingDirectory,
         ShellExtensions = ShellExtensions.ToArray(),
