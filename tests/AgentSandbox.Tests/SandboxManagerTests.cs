@@ -1,4 +1,5 @@
 using AgentSandbox.Core;
+using AgentSandbox.Core.Shell;
 
 namespace AgentSandbox.Tests;
 
@@ -174,5 +175,91 @@ public class SandboxManagerTests
         Assert.Equal("stats-test", stats.Id);
         Assert.Equal(3, stats.FileCount); // root + dir + file
         Assert.True(stats.CommandCount >= 3);
+    }
+
+    [Fact]
+    public void Create_WhenMaxActiveSandboxesReached_Throws()
+    {
+        var manager = new SandboxManager(
+            defaultOptions: null,
+            managerOptions: new SandboxManagerOptions { MaxActiveSandboxes = 1 });
+        manager.Create("first");
+
+        var ex = Assert.Throws<InvalidOperationException>(() => manager.Create("second"));
+
+        Assert.Contains("Maximum active sandboxes limit", ex.Message);
+    }
+
+    [Fact]
+    public void GetOrCreate_WhenAtCapacityForExistingSandbox_ReturnsExisting()
+    {
+        var manager = new SandboxManager(
+            defaultOptions: null,
+            managerOptions: new SandboxManagerOptions { MaxActiveSandboxes = 1 });
+        var first = manager.Create("existing");
+
+        var existing = manager.GetOrCreate("existing");
+
+        Assert.Same(first, existing);
+    }
+
+    [Fact]
+    public void GetOrCreate_WhenAtCapacityForNewSandbox_Throws()
+    {
+        var manager = new SandboxManager(
+            defaultOptions: null,
+            managerOptions: new SandboxManagerOptions { MaxActiveSandboxes = 1 });
+        manager.Create("first");
+
+        var ex = Assert.Throws<InvalidOperationException>(() => manager.GetOrCreate("second"));
+
+        Assert.Contains("Maximum active sandboxes limit", ex.Message);
+    }
+
+    [Fact]
+    public void CleanupScheduler_RemovesInactiveSandboxes()
+    {
+        using var manager = new SandboxManager(
+            defaultOptions: null,
+            managerOptions: new SandboxManagerOptions
+            {
+                InactivityTimeout = TimeSpan.FromMilliseconds(30),
+                CleanupInterval = TimeSpan.FromMilliseconds(20)
+            });
+        manager.Create("temp");
+
+        var cleaned = SpinWait.SpinUntil(() => manager.Get("temp") is null, TimeSpan.FromSeconds(2));
+
+        Assert.True(cleaned);
+    }
+
+    [Fact]
+    public void Execute_UsesDefaultCommandTimeout_FromManagerOptions()
+    {
+        var options = new SandboxOptions
+        {
+            CommandTimeout = TimeSpan.FromMilliseconds(20),
+            ShellExtensions = [new SlowCommand()]
+        };
+        var manager = new SandboxManager(options);
+        var sandbox = manager.Create();
+
+        var result = sandbox.Execute("slow 200");
+
+        Assert.False(result.Success);
+        Assert.Contains("timed out", result.Stderr, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private sealed class SlowCommand : IShellCommand
+    {
+        public string Name => "slow";
+        public string Description => "Sleeps for the given number of milliseconds";
+
+        public ShellResult Execute(string[] args, IShellContext context)
+        {
+            var delayMs = int.Parse(args[0]);
+            Thread.Sleep(delayMs);
+            return ShellResult.Ok("done");
+        }
     }
 }

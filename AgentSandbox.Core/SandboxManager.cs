@@ -5,16 +5,40 @@ namespace AgentSandbox.Core;
 /// <summary>
 /// Manages multiple sandbox instances. Thread-safe singleton for server-side usage.
 /// </summary>
-public class SandboxManager
+public class SandboxManager : IDisposable
 {
     private readonly ConcurrentDictionary<string, Sandbox> _sandboxes = new();
     private readonly SandboxOptions _defaultOptions;
     private readonly TimeSpan _inactivityTimeout;
+    private readonly int? _maxActiveSandboxes;
+    private readonly object _sync = new();
+    private Timer? _cleanupTimer;
+    private bool _disposed;
 
     public SandboxManager(SandboxOptions? defaultOptions = null, TimeSpan? inactivityTimeout = null)
+        : this(defaultOptions, new SandboxManagerOptions
+        {
+            InactivityTimeout = inactivityTimeout ?? TimeSpan.FromHours(1)
+        })
+    {
+    }
+
+    public SandboxManager(SandboxOptions? defaultOptions, SandboxManagerOptions? managerOptions)
     {
         _defaultOptions = defaultOptions ?? new SandboxOptions();
-        _inactivityTimeout = inactivityTimeout ?? TimeSpan.FromHours(1);
+        var options = managerOptions ?? new SandboxManagerOptions();
+        _inactivityTimeout = options.InactivityTimeout;
+        _maxActiveSandboxes = options.MaxActiveSandboxes;
+
+        if (_maxActiveSandboxes.HasValue && _maxActiveSandboxes.Value <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(managerOptions), "MaxActiveSandboxes must be greater than zero.");
+        }
+
+        if (options.CleanupInterval.HasValue)
+        {
+            StartCleanupScheduler(options.CleanupInterval.Value);
+        }
     }
 
     /// <summary>
@@ -22,14 +46,21 @@ public class SandboxManager
     /// </summary>
     public Sandbox Create(string? id = null, SandboxOptions? options = null)
     {
+        ThrowIfDisposed();
         var sandbox = new Sandbox(id, options ?? _defaultOptions, OnSandboxDisposed);
-        
-        if (!_sandboxes.TryAdd(sandbox.Id, sandbox))
+
+        lock (_sync)
         {
-            sandbox.Dispose();
-            throw new InvalidOperationException($"Sandbox with ID '{sandbox.Id}' already exists");
+            if (_sandboxes.ContainsKey(sandbox.Id))
+            {
+                sandbox.Dispose();
+                throw new InvalidOperationException($"Sandbox with ID '{sandbox.Id}' already exists");
+            }
+
+            EnsureCapacity();
+            _sandboxes[sandbox.Id] = sandbox;
         }
-        
+
         return sandbox;
     }
 
@@ -46,7 +77,25 @@ public class SandboxManager
     /// </summary>
     public Sandbox GetOrCreate(string id, SandboxOptions? options = null)
     {
-        return _sandboxes.GetOrAdd(id, _ => new Sandbox(id, options ?? _defaultOptions, OnSandboxDisposed));
+        ThrowIfDisposed();
+        if (_sandboxes.TryGetValue(id, out var existing))
+        {
+            return existing;
+        }
+
+        var sandbox = new Sandbox(id, options ?? _defaultOptions, OnSandboxDisposed);
+        lock (_sync)
+        {
+            if (_sandboxes.TryGetValue(id, out existing))
+            {
+                sandbox.Dispose();
+                return existing;
+            }
+
+            EnsureCapacity();
+            _sandboxes[id] = sandbox;
+            return sandbox;
+        }
     }
 
     /// <summary>
@@ -86,6 +135,7 @@ public class SandboxManager
     /// </summary>
     public int CleanupInactive()
     {
+        ThrowIfDisposed();
         var cutoff = DateTime.UtcNow - _inactivityTimeout;
         var toRemove = _sandboxes
             .Where(kvp => kvp.Value.LastActivityAt < cutoff)
@@ -104,4 +154,68 @@ public class SandboxManager
     /// Gets total count of active sandboxes.
     /// </summary>
     public int Count => _sandboxes.Count;
+
+    /// <summary>
+    /// Starts periodic cleanup for inactive sandboxes.
+    /// </summary>
+    public void StartCleanupScheduler(TimeSpan interval)
+    {
+        ThrowIfDisposed();
+        if (interval <= TimeSpan.Zero)
+        {
+            throw new ArgumentOutOfRangeException(nameof(interval), interval, "Cleanup interval must be greater than zero.");
+        }
+
+        lock (_sync)
+        {
+            _cleanupTimer?.Dispose();
+            _cleanupTimer = new Timer(_ => CleanupInactive(), null, interval, interval);
+        }
+    }
+
+    /// <summary>
+    /// Stops periodic cleanup.
+    /// </summary>
+    public void StopCleanupScheduler()
+    {
+        lock (_sync)
+        {
+            _cleanupTimer?.Dispose();
+            _cleanupTimer = null;
+        }
+    }
+
+    private void EnsureCapacity()
+    {
+        if (_maxActiveSandboxes.HasValue && _sandboxes.Count >= _maxActiveSandboxes.Value)
+        {
+            throw new InvalidOperationException($"Maximum active sandboxes limit ({_maxActiveSandboxes.Value}) reached");
+        }
+    }
+
+    private void ThrowIfDisposed()
+    {
+        if (_disposed)
+        {
+            throw new ObjectDisposedException(nameof(SandboxManager));
+        }
+    }
+
+    public void Dispose()
+    {
+        if (_disposed)
+        {
+            return;
+        }
+
+        StopCleanupScheduler();
+
+        foreach (var id in _sandboxes.Keys.ToList())
+        {
+            Destroy(id);
+        }
+
+        _disposed = true;
+        GC.SuppressFinalize(this);
+    }
 }
