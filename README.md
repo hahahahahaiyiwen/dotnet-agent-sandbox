@@ -479,12 +479,14 @@ var sandbox1 = manager.Get();
 var sandbox2 = manager.Get();
 var sandbox3 = manager.Get();
 
-// List all active sandboxes
-foreach (var sandbox in manager.List())
+// Inspect all active sandboxes
+foreach (var stats in manager.GetAllStats())
 {
-    var stats = sandbox.GetStats();
-    Console.WriteLine($"{sandbox.Id}: {stats.FileCount} files");
+    Console.WriteLine($"{stats.Id}: {stats.FileCount} files");
 }
+
+// Find an active sandbox by ID
+var found = manager.Find(sandbox2.Id);
 
 // Cleanup inactive sandboxes (default: 1 hour timeout)
 int cleaned = manager.CleanupInactive();

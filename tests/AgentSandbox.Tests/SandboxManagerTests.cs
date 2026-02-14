@@ -28,13 +28,13 @@ public class SandboxManagerTests
     }
 
     [Fact]
-    public void Get_TracksCreatedSandboxInList()
+    public void Get_TracksCreatedSandboxForFind()
     {
         var manager = new SandboxManager();
 
         var sandbox = manager.Get();
 
-        Assert.Contains(manager.List(), s => s.Id == sandbox.Id);
+        Assert.NotNull(manager.Find(sandbox.Id));
     }
 
     [Fact]
@@ -45,7 +45,7 @@ public class SandboxManagerTests
 
         sandbox.Dispose();
 
-        Assert.DoesNotContain(manager.List(), s => s.Id == sandbox.Id);
+        Assert.Null(manager.Find(sandbox.Id));
         Assert.Equal(0, manager.Count);
     }
 
@@ -58,7 +58,7 @@ public class SandboxManagerTests
         var result = manager.Destroy(sandbox.Id);
 
         Assert.True(result);
-        Assert.DoesNotContain(manager.List(), s => s.Id == sandbox.Id);
+        Assert.Null(manager.Find(sandbox.Id));
     }
 
     [Fact]
@@ -72,14 +72,14 @@ public class SandboxManagerTests
     }
 
     [Fact]
-    public void List_ReturnsAllActiveSandboxes()
+    public void GetAllStats_ReturnsAllActiveSandboxes()
     {
         var manager = new SandboxManager();
         var sandbox1 = manager.Get();
         var sandbox2 = manager.Get();
         var sandbox3 = manager.Get();
 
-        var sandboxes = manager.List().ToList();
+        var sandboxes = manager.GetAllStats().ToList();
 
         Assert.Equal(3, sandboxes.Count);
         Assert.Contains(sandboxes, s => s.Id == sandbox1.Id);
@@ -173,7 +173,7 @@ public class SandboxManagerTests
         var sandbox = manager.Get();
 
         var cleaned = SpinWait.SpinUntil(
-            () => !manager.List().Any(s => s.Id == sandbox.Id),
+            () => manager.Find(sandbox.Id) is null,
             TimeSpan.FromSeconds(2));
 
         Assert.True(cleaned);

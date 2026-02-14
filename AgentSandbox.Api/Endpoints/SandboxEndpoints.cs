@@ -342,6 +342,6 @@ public static class SandboxEndpoints
 
     private static Sandbox? FindSandbox(SandboxManager manager, string id)
     {
-        return manager.List().FirstOrDefault(s => string.Equals(s.Id, id, StringComparison.Ordinal));
+        return manager.Find(id);
     }
 }

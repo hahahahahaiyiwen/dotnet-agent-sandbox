@@ -86,9 +86,12 @@ public class SandboxManager : IDisposable
     }
 
     /// <summary>
-    /// Lists all active sandboxes.
+    /// Finds an active sandbox by ID.
     /// </summary>
-    public IEnumerable<Sandbox> List() => _sandboxes.Values;
+    public Sandbox? Find(string id)
+    {
+        return _sandboxes.TryGetValue(id, out var sandbox) ? sandbox : null;
+    }
 
     /// <summary>
     /// Gets statistics for all sandboxes.
