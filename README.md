@@ -485,9 +485,6 @@ foreach (var stats in manager.GetAllStats())
     Console.WriteLine($"{stats.Id}: {stats.FileCount} files");
 }
 
-// Find an active sandbox by ID
-var found = manager.Find(sandbox2.Id);
-
 // Cleanup inactive sandboxes (default: 1 hour timeout)
 int cleaned = manager.CleanupInactive();
 

@@ -2,11 +2,14 @@ using AgentSandbox.Api.Models;
 using AgentSandbox.Core;
 using AgentSandbox.Core.Validation;
 using Microsoft.AspNetCore.Mvc;
+using System.Collections.Concurrent;
 
 namespace AgentSandbox.Api.Endpoints;
 
 public static class SandboxEndpoints
 {
+    private static readonly ConcurrentDictionary<string, Sandbox> _activeSandboxes = new();
+
     public static void MapSandboxEndpoints(this WebApplication app)
     {
         var group = app.MapGroup("/api/sandbox")
@@ -81,6 +84,7 @@ public static class SandboxEndpoints
             }
 
             var sandbox = manager.Get(options);
+            _activeSandboxes[sandbox.Id] = sandbox;
             var stats = sandbox.GetStats();
 
             return Results.Created($"/api/sandbox/{sandbox.Id}", new SandboxResponse(
@@ -133,6 +137,7 @@ public static class SandboxEndpoints
         if (sandbox == null)
             return Results.NotFound(new ErrorResponse($"Sandbox '{id}' not found", 404));
 
+        _activeSandboxes.TryRemove(id, out _);
         sandbox.Dispose();
         return Results.NoContent();
     }
@@ -342,6 +347,18 @@ public static class SandboxEndpoints
 
     private static Sandbox? FindSandbox(SandboxManager manager, string id)
     {
-        return manager.Find(id);
+        if (!_activeSandboxes.TryGetValue(id, out var sandbox))
+        {
+            return null;
+        }
+
+        var isActive = manager.GetAllStats().Any(s => string.Equals(s.Id, id, StringComparison.Ordinal));
+        if (!isActive)
+        {
+            _activeSandboxes.TryRemove(id, out _);
+            return null;
+        }
+
+        return sandbox;
     }
 }

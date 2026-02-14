@@ -65,32 +65,11 @@ public class SandboxManager : IDisposable
     }
 
     /// <summary>
-    /// Destroys a sandbox and releases its resources.
-    /// </summary>
-    public bool Destroy(string id)
-    {
-        if (_sandboxes.TryRemove(id, out var sandbox))
-        {
-            sandbox.Dispose();
-            return true;
-        }
-        return false;
-    }
-
-    /// <summary>
-    /// Called when a sandbox is disposed directly (not via Destroy).
+    /// Called when a sandbox is disposed directly.
     /// </summary>
     private void OnSandboxDisposed(string id)
     {
         _sandboxes.TryRemove(id, out _);
-    }
-
-    /// <summary>
-    /// Finds an active sandbox by ID.
-    /// </summary>
-    public Sandbox? Find(string id)
-    {
-        return _sandboxes.TryGetValue(id, out var sandbox) ? sandbox : null;
     }
 
     /// <summary>
@@ -113,7 +92,7 @@ public class SandboxManager : IDisposable
 
         foreach (var id in toRemove)
         {
-            Destroy(id);
+            RemoveAndDispose(id);
         }
 
         return toRemove.Count;
@@ -181,10 +160,18 @@ public class SandboxManager : IDisposable
 
         foreach (var id in _sandboxes.Keys.ToList())
         {
-            Destroy(id);
+            RemoveAndDispose(id);
         }
 
         _disposed = true;
         GC.SuppressFinalize(this);
+    }
+
+    private void RemoveAndDispose(string id)
+    {
+        if (_sandboxes.TryRemove(id, out var sandbox))
+        {
+            sandbox.Dispose();
+        }
     }
 }
