@@ -62,12 +62,16 @@ var options = new SandboxOptions
     WorkingDirectory = "/workspace",
     MaxTotalSize = 1024 * 1024,  // 1MB total storage
     MaxFileSize = 64 * 1024,     // 64KB per file
+    MaxCommandLength = 8 * 1024, // 8KB command input max
+    MaxWritePayloadBytes = 64 * 1024, // 64KB WriteFile payload max
     MaxNodeCount = 5000,
     Environment = new() { ["HOME"] = "/home/agent" }
 };
 
 var sandbox = new Sandbox("agent-1", options);
 ```
+
+`ReadFile`, `WriteFile`, and `ApplyPatch` reject path inputs that contain `..` traversal segments.
 
 ## Importing Files
 

@@ -22,6 +22,12 @@ public class SandboxOptions
     
     /// <summary>Command execution timeout (default: 30 seconds).</summary>
     public TimeSpan CommandTimeout { get; set; } = TimeSpan.FromSeconds(30);
+
+    /// <summary>Maximum UTF-8 payload size for Execute command input in bytes (default: 8KB).</summary>
+    public int MaxCommandLength { get; set; } = 8 * 1024;
+
+    /// <summary>Maximum UTF-8 payload size for WriteFile content input in bytes (default: 100KB).</summary>
+    public int MaxWritePayloadBytes { get; set; } = 100 * 1024;
     
     /// <summary>Initial environment variables.</summary>
     public Dictionary<string, string> Environment { get; set; } = new();
@@ -67,6 +73,8 @@ public class SandboxOptions
         MaxFileSize = MaxFileSize,
         MaxNodeCount = MaxNodeCount,
         CommandTimeout = CommandTimeout,
+        MaxCommandLength = MaxCommandLength,
+        MaxWritePayloadBytes = MaxWritePayloadBytes,
         Environment = new Dictionary<string, string>(Environment),
         WorkingDirectory = WorkingDirectory,
         ShellExtensions = ShellExtensions.ToArray(),

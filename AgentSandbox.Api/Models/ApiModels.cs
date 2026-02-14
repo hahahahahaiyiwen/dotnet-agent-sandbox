@@ -69,4 +69,4 @@ public record StatsResponse(
     DateTime LastActivityAt
 );
 
-public record ErrorResponse(string Error, int StatusCode);
+public record ErrorResponse(string Error, int StatusCode, string? ErrorCode = null);
