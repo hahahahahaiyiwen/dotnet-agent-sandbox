@@ -65,7 +65,7 @@ public class SandboxValidationTests
     {
         using var sandbox = new Sandbox();
 
-        var ex = Assert.Throws<CoreValidationException>(() => sandbox.ReadFile("../secret.txt"));
+        var ex = Assert.Throws<CoreValidationException>(() => sandbox.ReadFileLines("../secret.txt").ToList());
 
         Assert.Equal(CoreValidationErrorCodes.PathTraversalDetected, ex.ErrorCode);
     }
@@ -75,7 +75,7 @@ public class SandboxValidationTests
     {
         using var sandbox = new Sandbox();
 
-        Assert.Throws<ArgumentNullException>(() => sandbox.ReadFile(null!));
+        Assert.Throws<ArgumentNullException>(() => sandbox.ReadFileLines(null!).ToList());
     }
 
     [Fact]
@@ -83,7 +83,7 @@ public class SandboxValidationTests
     {
         using var sandbox = new Sandbox();
 
-        var ex = Assert.Throws<CoreValidationException>(() => sandbox.ReadFile("../../secret.txt"));
+        var ex = Assert.Throws<CoreValidationException>(() => sandbox.ReadFileLines("../../secret.txt").ToList());
 
         Assert.Equal(CoreValidationErrorCodes.PathTraversalDetected, ex.ErrorCode);
     }
@@ -93,7 +93,7 @@ public class SandboxValidationTests
     {
         using var sandbox = new Sandbox();
 
-        var ex = Assert.Throws<CoreValidationException>(() => sandbox.ReadFile("/a/b/../../../secret.txt"));
+        var ex = Assert.Throws<CoreValidationException>(() => sandbox.ReadFileLines("/a/b/../../../secret.txt").ToList());
 
         Assert.Equal(CoreValidationErrorCodes.PathTraversalDetected, ex.ErrorCode);
     }
@@ -104,7 +104,7 @@ public class SandboxValidationTests
         using var sandbox = new Sandbox();
         sandbox.WriteFile("/file..txt", "ok");
 
-        var content = sandbox.ReadFile("/file..txt");
+        var content = string.Join("\n", sandbox.ReadFileLines("/file..txt"));
 
         Assert.Equal("ok", content);
     }
