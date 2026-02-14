@@ -1,4 +1,5 @@
 using AgentSandbox.Core.Importing;
+using AgentSandbox.Core.Security;
 using AgentSandbox.Core.Shell;
 using AgentSandbox.Core.Skills;
 using AgentSandbox.Core.Telemetry;
@@ -49,6 +50,11 @@ public class SandboxOptions
     public SandboxTelemetryOptions? Telemetry { get; set; }
 
     /// <summary>
+    /// Host-managed secret broker for resolving secret references at execution time.
+    /// </summary>
+    public ISecretBroker? SecretBroker { get; set; }
+
+    /// <summary>
     /// Creates a shallow copy of this options instance.
     /// </summary>
     public SandboxOptions Clone() => new()
@@ -65,6 +71,7 @@ public class SandboxOptions
         {
             BasePath = AgentSkills.BasePath
         },
-        Telemetry = Telemetry
+        Telemetry = Telemetry,
+        SecretBroker = SecretBroker
     };
 }

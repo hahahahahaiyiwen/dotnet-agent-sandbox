@@ -1,6 +1,7 @@
 using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 
 namespace AgentSandbox.Core.Shell.Extensions;
 
@@ -29,13 +30,17 @@ Options:
   -s, --silent             Silent mode (no progress)
   -i, --include            Include response headers in output
   -L, --location           Follow redirects
+  --secret-ref <ref>       Resolve secret reference (usable as secretRef:<ref>)
   -h, --help               Show this help message
 
 Examples:
   curl https://api.example.com/data
   curl -X POST -H ""Content-Type: application/json"" -d '{""key"":""value""}' https://api.example.com
+  curl -H ""Authorization: Bearer secretRef:api-token"" https://api.example.com/data
   curl -o output.json https://api.example.com/data
   curl -i -L https://example.com";
+
+    private static readonly Regex SecretRefRegex = new(@"secretRef:([A-Za-z0-9._-]+)", RegexOptions.Compiled);
 
     public CurlCommand() : this(new HttpClient())
     {
@@ -68,6 +73,7 @@ Examples:
 
         try
         {
+            options = ResolveSecretReferences(options, context);
             var response = ExecuteRequest(options).GetAwaiter().GetResult();
             
             var output = new StringBuilder();
@@ -236,6 +242,36 @@ Examples:
         }
 
         return options;
+    }
+
+    private static CurlOptions ResolveSecretReferences(CurlOptions options, IShellContext context)
+    {
+        options.Url = ResolveSecretRefs(options.Url, context);
+        if (!string.IsNullOrEmpty(options.Data))
+        {
+            options.Data = ResolveSecretRefs(options.Data, context);
+        }
+
+        for (var i = 0; i < options.Headers.Count; i++)
+        {
+            options.Headers[i] = ResolveSecretRefs(options.Headers[i], context);
+        }
+
+        return options;
+    }
+
+    private static string ResolveSecretRefs(string value, IShellContext context)
+    {
+        return SecretRefRegex.Replace(value, match =>
+        {
+            var secretRef = match.Groups[1].Value;
+            if (!context.TryResolveSecret(secretRef, out var secretValue))
+            {
+                throw new InvalidOperationException($"unknown secretRef '{secretRef}'");
+            }
+
+            return secretValue;
+        });
     }
 
     private class CurlOptions

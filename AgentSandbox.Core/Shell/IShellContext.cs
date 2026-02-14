@@ -1,4 +1,5 @@
 using AgentSandbox.Core.FileSystem;
+using AgentSandbox.Core.Security;
 
 namespace AgentSandbox.Core.Shell;
 
@@ -26,6 +27,12 @@ public interface IShellContext
     /// Resolves a path relative to the current directory.
     /// </summary>
     string ResolvePath(string path);
+
+    /// <summary>
+    /// Resolves a secret reference to its value using host-provided broker.
+    /// Returns false when the reference cannot be resolved.
+    /// </summary>
+    bool TryResolveSecret(string secretRef, out string secretValue);
 
     /// <summary>
     /// Gets or creates a cached value scoped to this session.

@@ -2,6 +2,7 @@ using System.Net;
 using System.Text;
 using System.Text.Json;
 using AgentSandbox.Core.FileSystem;
+using AgentSandbox.Core.Security;
 using AgentSandbox.Core.Shell;
 using AgentSandbox.Core.Shell.Extensions;
 
@@ -114,6 +115,39 @@ public class CurlCommandTests
         Assert.True(result.Success);
         Assert.True(handler.LastRequest?.Headers.Contains("Authorization"));
         Assert.True(handler.LastRequest?.Headers.Contains("X-Custom"));
+    }
+
+    [Fact]
+    public void Curl_WithSecretRefHeader_ResolvesSecretJustInTime()
+    {
+        var handler = new MockHttpMessageHandler("OK", HttpStatusCode.OK);
+        var httpClient = new HttpClient(handler);
+        var broker = new TestSecretBroker(new Dictionary<string, string>
+        {
+            ["api-token"] = "super-secret-token"
+        });
+        var shell = new SandboxShell(_fs, broker);
+        shell.RegisterCommand(new CurlCommand(httpClient));
+
+        var result = shell.Execute("curl -H \"Authorization: Bearer secretRef:api-token\" http://example.com/api");
+
+        Assert.True(result.Success);
+        Assert.Equal("Bearer super-secret-token", handler.LastRequest?.Headers.GetValues("Authorization").First());
+    }
+
+    [Fact]
+    public void Curl_WithUnknownSecretRef_ReturnsError()
+    {
+        var handler = new MockHttpMessageHandler("OK", HttpStatusCode.OK);
+        var httpClient = new HttpClient(handler);
+        var broker = new TestSecretBroker(new Dictionary<string, string>());
+        var shell = new SandboxShell(_fs, broker);
+        shell.RegisterCommand(new CurlCommand(httpClient));
+
+        var result = shell.Execute("curl -H \"Authorization: Bearer secretRef:missing\" http://example.com/api");
+
+        Assert.False(result.Success);
+        Assert.Contains("unknown secretRef 'missing'", result.Stderr);
     }
 
     #endregion
@@ -311,6 +345,21 @@ public class CurlCommandTests
                 Content = new StringContent(_response),
                 RequestMessage = request
             };
+        }
+    }
+
+    private sealed class TestSecretBroker : ISecretBroker
+    {
+        private readonly IReadOnlyDictionary<string, string> _secrets;
+
+        public TestSecretBroker(IReadOnlyDictionary<string, string> secrets)
+        {
+            _secrets = secrets;
+        }
+
+        public bool TryResolve(string secretRef, out string secretValue)
+        {
+            return _secrets.TryGetValue(secretRef, out secretValue!);
         }
     }
 
