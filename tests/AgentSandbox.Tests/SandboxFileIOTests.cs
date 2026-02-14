@@ -16,6 +16,11 @@ public class SandboxFileIOTests : IDisposable
         _sandbox?.Dispose();
     }
 
+    private string ReadAll(string path)
+    {
+        return string.Join("\n", _sandbox.ReadFileLines(path));
+    }
+
     #region ReadFile Tests
 
     [Fact]
@@ -24,7 +29,7 @@ public class SandboxFileIOTests : IDisposable
         _sandbox.Execute("mkdir -p /test");
         _sandbox.Execute("echo 'Hello World' > /test/file.txt");
 
-        var content = _sandbox.ReadFile("/test/file.txt");
+        var content = ReadAll("/test/file.txt");
 
         Assert.Equal("Hello World", content.Trim());
     }
@@ -32,7 +37,7 @@ public class SandboxFileIOTests : IDisposable
     [Fact]
     public void ReadFile_ThrowsWhenFileNotFound()
     {
-        Assert.Throws<FileNotFoundException>(() => _sandbox.ReadFile("/nonexistent/file.txt"));
+        Assert.Throws<FileNotFoundException>(() => ReadAll("/nonexistent/file.txt"));
     }
 
     [Fact]
@@ -40,7 +45,7 @@ public class SandboxFileIOTests : IDisposable
     {
         _sandbox.Execute("mkdir -p /test/dir");
 
-        Assert.Throws<InvalidOperationException>(() => _sandbox.ReadFile("/test/dir"));
+        Assert.Throws<InvalidOperationException>(() => ReadAll("/test/dir"));
     }
 
     [Fact]
@@ -49,7 +54,7 @@ public class SandboxFileIOTests : IDisposable
         var multilineContent = "Line 1\nLine 2\nLine 3";
         _sandbox.WriteFile("/test.txt", multilineContent);
 
-        var content = _sandbox.ReadFile("/test.txt");
+        var content = ReadAll("/test.txt");
 
         Assert.Equal(multilineContent, content);
     }
@@ -59,7 +64,7 @@ public class SandboxFileIOTests : IDisposable
     {
         _sandbox.WriteFile("/empty.txt", "");
 
-        var content = _sandbox.ReadFile("/empty.txt");
+        var content = ReadAll("/empty.txt");
 
         Assert.Equal("", content);
     }
@@ -70,7 +75,7 @@ public class SandboxFileIOTests : IDisposable
         var specialContent = "Special chars: !@#$%^&*()_+-=[]{}|;:',.<>?/\\";
         _sandbox.WriteFile("/special.txt", specialContent);
 
-        var content = _sandbox.ReadFile("/special.txt");
+        var content = ReadAll("/special.txt");
 
         Assert.Equal(specialContent, content);
     }
@@ -313,7 +318,7 @@ public class SandboxFileIOTests : IDisposable
         var content = "Line 1\nLine 2\n\n";
         _sandbox.WriteFile("/double.txt", content);
 
-        var result = _sandbox.ReadFile("/double.txt");
+        var result = ReadAll("/double.txt");
         
         // Should remove only the final empty line created by the last \n
         Assert.Equal("Line 1\nLine 2\n", result);
@@ -444,7 +449,7 @@ public class SandboxFileIOTests : IDisposable
         _sandbox.WriteFile("/test.txt", content);
 
         // Default startLine=1, endLine=null should read full file
-        var result = _sandbox.ReadFile("/test.txt");
+        var result = ReadAll("/test.txt");
 
         Assert.Equal("Line 1\nLine 2\nLine 3", result);
     }
@@ -469,7 +474,7 @@ public class SandboxFileIOTests : IDisposable
         _sandbox.WriteFile("/new.txt", "content");
 
         // Just verify file exists by reading it
-        var content = _sandbox.ReadFile("/new.txt");
+        var content = ReadAll("/new.txt");
         Assert.Equal("content", content);
     }
 
@@ -479,7 +484,7 @@ public class SandboxFileIOTests : IDisposable
         _sandbox.WriteFile("/file.txt", "original");
         _sandbox.WriteFile("/file.txt", "updated");
 
-        var content = _sandbox.ReadFile("/file.txt");
+        var content = ReadAll("/file.txt");
 
         Assert.Equal("updated", content);
     }
@@ -490,7 +495,7 @@ public class SandboxFileIOTests : IDisposable
         _sandbox.WriteFile("/a/b/c/file.txt", "content");
 
         // Verify directories exist by checking the file can be read
-        var content = _sandbox.ReadFile("/a/b/c/file.txt");
+        var content = ReadAll("/a/b/c/file.txt");
         Assert.Equal("content", content);
     }
 
@@ -507,7 +512,7 @@ public class SandboxFileIOTests : IDisposable
     {
         _sandbox.WriteFile("/empty.txt", "");
 
-        var content = _sandbox.ReadFile("/empty.txt");
+        var content = ReadAll("/empty.txt");
 
         Assert.Equal("", content);
     }
@@ -518,7 +523,7 @@ public class SandboxFileIOTests : IDisposable
         var multilineContent = "Line 1\nLine 2\nLine 3";
         _sandbox.WriteFile("/multiline.txt", multilineContent);
 
-        var content = _sandbox.ReadFile("/multiline.txt");
+        var content = ReadAll("/multiline.txt");
 
         Assert.Equal(multilineContent, content);
     }
@@ -529,7 +534,7 @@ public class SandboxFileIOTests : IDisposable
         var largeContent = new string('x', 100000);
         _sandbox.WriteFile("/large.txt", largeContent);
 
-        var content = _sandbox.ReadFile("/large.txt");
+        var content = ReadAll("/large.txt");
 
         Assert.Equal(largeContent, content);
     }
@@ -564,7 +569,7 @@ public class SandboxFileIOTests : IDisposable
 
         _sandbox.ApplyPatch("/file.txt", patch);
 
-        var content = _sandbox.ReadFile("/file.txt");
+        var content = ReadAll("/file.txt");
         // Normalize line endings
         var normalized = content.Replace("\r\n", "\n");
         Assert.Equal("Line 1\nLine 2\nLine 3", normalized);
@@ -585,7 +590,7 @@ public class SandboxFileIOTests : IDisposable
 
         _sandbox.ApplyPatch("/file.txt", patch);
 
-        var content = _sandbox.ReadFile("/file.txt");
+        var content = ReadAll("/file.txt");
         var normalized = content.Replace("\r\n", "\n");
         Assert.Equal("Line 1\nLine 3", normalized);
     }
@@ -606,7 +611,7 @@ public class SandboxFileIOTests : IDisposable
 
         _sandbox.ApplyPatch("/file.txt", patch);
 
-        var content = _sandbox.ReadFile("/file.txt");
+        var content = ReadAll("/file.txt");
         var normalized = content.Replace("\r\n", "\n");
         Assert.Equal("Line 1\nNew Line 2\nLine 3", normalized);
     }
@@ -630,7 +635,7 @@ public class SandboxFileIOTests : IDisposable
 
         _sandbox.ApplyPatch("/file.txt", patch);
 
-        var content = _sandbox.ReadFile("/file.txt");
+        var content = ReadAll("/file.txt");
         var normalized = content.Replace("\r\n", "\n");
         Assert.Equal("A\nA2\nB\nC\nD\nE2", normalized);
     }
@@ -701,7 +706,7 @@ public class SandboxFileIOTests : IDisposable
         _sandbox.ApplyPatch("/file.txt", patch);
 
         // File should still exist and be readable
-        var content = _sandbox.ReadFile("/file.txt");
+        var content = ReadAll("/file.txt");
         Assert.Equal("modified", content);
     }
 
@@ -715,7 +720,7 @@ public class SandboxFileIOTests : IDisposable
         var originalContent = "Original content\nLine 2\nLine 3";
 
         _sandbox.WriteFile("/roundtrip.txt", originalContent);
-        var readContent = _sandbox.ReadFile("/roundtrip.txt");
+        var readContent = ReadAll("/roundtrip.txt");
 
         Assert.Equal(originalContent, readContent);
     }
@@ -737,7 +742,7 @@ public class SandboxFileIOTests : IDisposable
         _sandbox.ApplyPatch("/sequence.txt", patch);
 
         // Read and verify (normalize line endings)
-        var content = _sandbox.ReadFile("/sequence.txt").Replace("\r\n", "\n");
+        var content = ReadAll("/sequence.txt").Replace("\r\n", "\n");
         Assert.Equal("Start\nMiddle\nEnd", content);
     }
 
@@ -750,7 +755,7 @@ public class SandboxFileIOTests : IDisposable
         _sandbox.WriteFile("/test.txt", "content");
         var cwd2 = _sandbox.CurrentDirectory;
 
-        _sandbox.ReadFile("/test.txt");
+        ReadAll("/test.txt");
         var cwd3 = _sandbox.CurrentDirectory;
 
         Assert.Equal("/", cwd1);

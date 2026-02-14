@@ -167,44 +167,6 @@ public class Sandbox : IDisposable, IObservableSandbox
     #region File System I/O
 
     /// <summary>
-    /// Reads the entire contents of a file as UTF-8 encoded text.
-    /// </summary>
-    /// <param name="path">Path to the file to read.</param>
-    /// <returns>File contents as a string, with line endings normalized and trailing newline removed if present.</returns>
-    /// <exception cref="FileNotFoundException">File does not exist.</exception>
-    /// <exception cref="InvalidOperationException">Path is a directory.</exception>
-    public string ReadFile(string path)
-    {
-        ThrowIfDisposed();
-        LastActivityAt = DateTime.UtcNow;
-        
-        var stopwatch = Stopwatch.StartNew();
-        var activity = _telemetry.StartReadFileActivity(path);
-
-        try
-        {
-            // Delegate to FileSystem - it handles encoding and normalization
-            var result = _fileSystem.ReadFile(path);
-            
-            stopwatch.Stop();
-            
-            // Record telemetry
-            _telemetry.RecordReadFileSuccess(path, stopwatch, result.Length, readMode: "full");
-
-            return result;
-        }
-        catch (Exception ex)
-        {
-            _telemetry.RecordReadFileError(path, ex);
-            throw;
-        }
-        finally
-        {
-            activity?.Dispose();
-        }
-    }
-
-    /// <summary>
     /// Reads file lines within a range as a lazy-evaluated stream.
     /// Useful for reading specific line ranges from large files without materializing the entire file.
     /// </summary>
