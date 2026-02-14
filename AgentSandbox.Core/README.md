@@ -71,7 +71,7 @@ var options = new SandboxOptions
 var sandbox = new Sandbox("agent-1", options);
 ```
 
-`ReadFile`, `WriteFile`, and `ApplyPatch` reject path inputs that contain `..` traversal segments.
+`ReadFile`, `ReadFileLines`, `WriteFile`, and `ApplyPatch` reject path inputs that contain `..` traversal segments.
 
 ## Importing Files
 

@@ -443,6 +443,11 @@ public class Sandbox : IDisposable, IObservableSandbox
 
     private void ValidateCommandInput(string command)
     {
+        if (command is null)
+        {
+            throw new ArgumentNullException(nameof(command));
+        }
+
         var byteCount = Encoding.UTF8.GetByteCount(command);
         if (byteCount > _options.MaxCommandLength)
         {
@@ -452,6 +457,11 @@ public class Sandbox : IDisposable, IObservableSandbox
 
     private void ValidateWritePayloadInput(string content)
     {
+        if (content is null)
+        {
+            throw new ArgumentNullException(nameof(content));
+        }
+
         var byteCount = Encoding.UTF8.GetByteCount(content);
         if (byteCount > _options.MaxWritePayloadBytes)
         {
@@ -461,6 +471,11 @@ public class Sandbox : IDisposable, IObservableSandbox
 
     private static void ValidatePathInput(string path, string paramName = "path")
     {
+        if (string.IsNullOrEmpty(path))
+        {
+            throw new ArgumentNullException(paramName);
+        }
+
         var normalized = path.Replace('\\', '/');
         var segments = normalized.Split('/', StringSplitOptions.RemoveEmptyEntries);
         if (segments.Any(static segment => segment == ".."))
