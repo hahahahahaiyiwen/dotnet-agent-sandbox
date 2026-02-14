@@ -72,16 +72,7 @@ public class SandboxManager : IDisposable
         _sandboxes.TryRemove(id, out _);
     }
 
-    /// <summary>
-    /// Gets statistics for all sandboxes.
-    /// </summary>
-    public IEnumerable<SandboxStats> GetAllStats() => 
-        _sandboxes.Values.Select(s => s.GetStats());
-
-    /// <summary>
-    /// Cleans up inactive sandboxes.
-    /// </summary>
-    public int CleanupInactive()
+    private int CleanupInactive()
     {
         ThrowIfDisposed();
         var cutoff = DateTime.UtcNow - _inactivityTimeout;
@@ -98,15 +89,7 @@ public class SandboxManager : IDisposable
         return toRemove.Count;
     }
 
-    /// <summary>
-    /// Gets total count of active sandboxes.
-    /// </summary>
-    public int Count => _sandboxes.Count;
-
-    /// <summary>
-    /// Starts periodic cleanup for inactive sandboxes.
-    /// </summary>
-    public void StartCleanupScheduler(TimeSpan interval)
+    private void StartCleanupScheduler(TimeSpan interval)
     {
         ThrowIfDisposed();
         if (interval <= TimeSpan.Zero)
@@ -117,14 +100,23 @@ public class SandboxManager : IDisposable
         lock (_sync)
         {
             _cleanupTimer?.Dispose();
-            _cleanupTimer = new Timer(_ => CleanupInactive(), null, interval, interval);
+            _cleanupTimer = new Timer(CleanupTimerCallback, null, interval, interval);
         }
     }
 
-    /// <summary>
-    /// Stops periodic cleanup.
-    /// </summary>
-    public void StopCleanupScheduler()
+    private void CleanupTimerCallback(object? _)
+    {
+        try
+        {
+            CleanupInactive();
+        }
+        catch (ObjectDisposedException)
+        {
+            StopCleanupScheduler();
+        }
+    }
+
+    private void StopCleanupScheduler()
     {
         lock (_sync)
         {

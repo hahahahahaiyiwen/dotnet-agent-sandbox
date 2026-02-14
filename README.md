@@ -479,18 +479,11 @@ var sandbox1 = manager.Get();
 var sandbox2 = manager.Get();
 var sandbox3 = manager.Get();
 
-// Inspect all active sandboxes
-foreach (var stats in manager.GetAllStats())
-{
-    Console.WriteLine($"{stats.Id}: {stats.FileCount} files");
-}
-
-// Cleanup inactive sandboxes (default: 1 hour timeout)
-int cleaned = manager.CleanupInactive();
-
 // Destroy specific sandbox
 sandbox1.Dispose();
 ```
+
+To enable automatic cleanup of inactive sandboxes, configure `SandboxManagerOptions.CleanupInterval` and `InactivityTimeout`.
 
 ## Use Cases
 

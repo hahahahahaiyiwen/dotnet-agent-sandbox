@@ -103,7 +103,8 @@ public static class SandboxEndpoints
 
     private static IResult ListSandboxes([FromServices] SandboxManager manager)
     {
-        var sandboxes = manager.GetAllStats()
+        var sandboxes = GetTrackedSandboxes()
+            .Select(s => s.GetStats())
             .Select(s => new SandboxResponse(
                 s.Id,
                 s.CurrentDirectory,
@@ -117,7 +118,7 @@ public static class SandboxEndpoints
 
     private static IResult GetSandbox(string id, [FromServices] SandboxManager manager)
     {
-        var sandbox = FindSandbox(manager, id);
+        var sandbox = FindSandbox(id);
         if (sandbox == null)
             return Results.NotFound(new ErrorResponse($"Sandbox '{id}' not found", 404));
 
@@ -133,7 +134,7 @@ public static class SandboxEndpoints
 
     private static IResult DeleteSandbox(string id, [FromServices] SandboxManager manager)
     {
-        var sandbox = FindSandbox(manager, id);
+        var sandbox = FindSandbox(id);
         if (sandbox == null)
             return Results.NotFound(new ErrorResponse($"Sandbox '{id}' not found", 404));
 
@@ -147,7 +148,7 @@ public static class SandboxEndpoints
         [FromBody] ExecuteCommandRequest request,
         [FromServices] SandboxManager manager)
     {
-        var sandbox = FindSandbox(manager, id);
+        var sandbox = FindSandbox(id);
         if (sandbox == null)
             return Results.NotFound(new ErrorResponse($"Sandbox '{id}' not found", 404));
 
@@ -172,7 +173,7 @@ public static class SandboxEndpoints
 
     private static IResult GetHistory(string id, [FromServices] SandboxManager manager)
     {
-        var sandbox = FindSandbox(manager, id);
+        var sandbox = FindSandbox(id);
         if (sandbox == null)
             return Results.NotFound(new ErrorResponse($"Sandbox '{id}' not found", 404));
 
@@ -194,7 +195,7 @@ public static class SandboxEndpoints
         [FromQuery] string path,
         [FromServices] SandboxManager manager)
     {
-        var sandbox = FindSandbox(manager, id);
+        var sandbox = FindSandbox(id);
         if (sandbox == null)
             return Results.NotFound(new ErrorResponse($"Sandbox '{id}' not found", 404));
 
@@ -227,7 +228,7 @@ public static class SandboxEndpoints
         [FromBody] WriteFileRequest request,
         [FromServices] SandboxManager manager)
     {
-        var sandbox = FindSandbox(manager, id);
+        var sandbox = FindSandbox(id);
         if (sandbox == null)
             return Results.NotFound(new ErrorResponse($"Sandbox '{id}' not found", 404));
 
@@ -251,7 +252,7 @@ public static class SandboxEndpoints
         [FromQuery] string? path,
         [FromServices] SandboxManager manager)
     {
-        var sandbox = FindSandbox(manager, id);
+        var sandbox = FindSandbox(id);
         if (sandbox == null)
             return Results.NotFound(new ErrorResponse($"Sandbox '{id}' not found", 404));
 
@@ -295,7 +296,7 @@ public static class SandboxEndpoints
 
     private static IResult CreateSnapshot(string id, [FromServices] SandboxManager manager)
     {
-        var sandbox = FindSandbox(manager, id);
+        var sandbox = FindSandbox(id);
         if (sandbox == null)
             return Results.NotFound(new ErrorResponse($"Sandbox '{id}' not found", 404));
 
@@ -316,7 +317,7 @@ public static class SandboxEndpoints
         [FromQuery] string snapshotId,
         [FromServices] SandboxManager manager)
     {
-        var sandbox = FindSandbox(manager, id);
+        var sandbox = FindSandbox(id);
         if (sandbox == null)
             return Results.NotFound(new ErrorResponse($"Sandbox '{id}' not found", 404));
 
@@ -329,7 +330,7 @@ public static class SandboxEndpoints
 
     private static IResult GetStats(string id, [FromServices] SandboxManager manager)
     {
-        var sandbox = FindSandbox(manager, id);
+        var sandbox = FindSandbox(id);
         if (sandbox == null)
             return Results.NotFound(new ErrorResponse($"Sandbox '{id}' not found", 404));
 
@@ -345,20 +346,46 @@ public static class SandboxEndpoints
         ));
     }
 
-    private static Sandbox? FindSandbox(SandboxManager manager, string id)
+    private static Sandbox? FindSandbox(string id)
     {
         if (!_activeSandboxes.TryGetValue(id, out var sandbox))
         {
             return null;
         }
 
-        var isActive = manager.GetAllStats().Any(s => string.Equals(s.Id, id, StringComparison.Ordinal));
-        if (!isActive)
+        if (IsDisposed(sandbox))
         {
             _activeSandboxes.TryRemove(id, out _);
             return null;
         }
 
         return sandbox;
+    }
+
+    private static IEnumerable<Sandbox> GetTrackedSandboxes()
+    {
+        foreach (var (id, sandbox) in _activeSandboxes.ToArray())
+        {
+            if (IsDisposed(sandbox))
+            {
+                _activeSandboxes.TryRemove(id, out _);
+                continue;
+            }
+
+            yield return sandbox;
+        }
+    }
+
+    private static bool IsDisposed(Sandbox sandbox)
+    {
+        try
+        {
+            _ = sandbox.GetStats();
+            return false;
+        }
+        catch (ObjectDisposedException)
+        {
+            return true;
+        }
     }
 }
