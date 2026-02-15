@@ -189,6 +189,21 @@ var snapshot = sandbox.CreateSnapshot();
 sandbox.RestoreSnapshot(snapshot);
 ```
 
+Manager-level persistence via configurable store:
+
+```csharp
+var manager = new SandboxManager(
+    defaultOptions: null,
+    managerOptions: new SandboxManagerOptions
+    {
+        SnapshotStore = new InMemorySnapshotStore()
+    });
+
+var sandbox = manager.Get();
+var snapshotId = manager.SaveSnapshot(sandbox.Id);
+var restoredSandbox = manager.RestoreSnapshot(snapshotId); // new sandbox ID
+```
+
 ## History and Observability
 
 ```csharp

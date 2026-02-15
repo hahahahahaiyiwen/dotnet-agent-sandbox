@@ -19,4 +19,9 @@ public class SandboxManagerOptions
     /// Optional interval for automatic cleanup of inactive sandboxes. Null disables scheduling.
     /// </summary>
     public TimeSpan? CleanupInterval { get; set; }
+
+    /// <summary>
+    /// Optional snapshot store used by manager-level save/restore APIs.
+    /// </summary>
+    public ISnapshotStore? SnapshotStore { get; set; }
 }

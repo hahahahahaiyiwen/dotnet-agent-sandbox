@@ -15,8 +15,13 @@ builder.Services.AddSwaggerGen(c =>
     });
 });
 
-// Register SandboxManager as singleton
-builder.Services.AddSingleton<SandboxManager>();
+builder.Services.AddSingleton<ISnapshotStore, InMemorySnapshotStore>();
+builder.Services.AddSingleton<SandboxManager>(sp => new SandboxManager(
+    defaultOptions: null,
+    managerOptions: new SandboxManagerOptions
+    {
+        SnapshotStore = sp.GetRequiredService<ISnapshotStore>()
+    }));
 
 // Add CORS for development
 builder.Services.AddCors(options =>

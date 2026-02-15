@@ -291,25 +291,28 @@ public static class SandboxEndpoints
         }
     }
 
-    // In-memory snapshot storage (for demo; use persistent storage in production)
-    private static readonly Dictionary<string, SandboxSnapshot> _snapshots = new();
-
     private static IResult CreateSnapshot(string id, [FromServices] SandboxManager manager)
     {
         var sandbox = FindSandbox(id);
         if (sandbox == null)
             return Results.NotFound(new ErrorResponse($"Sandbox '{id}' not found", 404));
 
-        var snapshot = sandbox.CreateSnapshot();
-        var snapshotId = Guid.NewGuid().ToString("N")[..12];
-        _snapshots[snapshotId] = snapshot;
+        try
+        {
+            var snapshot = sandbox.CreateSnapshot();
+            var snapshotId = manager.SaveSnapshot(id);
 
-        return Results.Ok(new SnapshotResponse(
-            snapshotId,
-            sandbox.Id,
-            snapshot.CreatedAt,
-            snapshot.FileSystemData.Length
-        ));
+            return Results.Ok(new SnapshotResponse(
+                snapshotId,
+                sandbox.Id,
+                snapshot.CreatedAt,
+                snapshot.FileSystemData.Length
+            ));
+        }
+        catch (InvalidOperationException ex)
+        {
+            return Results.Conflict(new ErrorResponse(ex.Message, 409));
+        }
     }
 
     private static IResult RestoreSnapshot(
@@ -321,11 +324,22 @@ public static class SandboxEndpoints
         if (sandbox == null)
             return Results.NotFound(new ErrorResponse($"Sandbox '{id}' not found", 404));
 
-        if (!_snapshots.TryGetValue(snapshotId, out var snapshot))
-            return Results.NotFound(new ErrorResponse($"Snapshot '{snapshotId}' not found", 404));
-
-        sandbox.RestoreSnapshot(snapshot);
-        return Results.Ok(new { restored = true, snapshotId });
+        try
+        {
+            var restored = manager.RestoreSnapshot(snapshotId);
+            _activeSandboxes[restored.Id] = restored;
+            _activeSandboxes.TryRemove(id, out _);
+            sandbox.Dispose();
+            return Results.Ok(new { restored = true, snapshotId, sandboxId = restored.Id });
+        }
+        catch (KeyNotFoundException ex)
+        {
+            return Results.NotFound(new ErrorResponse(ex.Message, 404));
+        }
+        catch (InvalidOperationException ex)
+        {
+            return Results.Conflict(new ErrorResponse(ex.Message, 409));
+        }
     }
 
     private static IResult GetStats(string id, [FromServices] SandboxManager manager)

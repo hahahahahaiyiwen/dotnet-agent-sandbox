@@ -317,7 +317,7 @@ sandbox.Execute("echo 'Hello' > project/readme.txt");
 | PUT | `/api/sandbox/{id}/fs` | Write file |
 | GET | `/api/sandbox/{id}/ls?path=` | List directory |
 | POST | `/api/sandbox/{id}/snapshot` | Create snapshot |
-| POST | `/api/sandbox/{id}/restore?snapshotId=` | Restore snapshot |
+| POST | `/api/sandbox/{id}/restore?snapshotId=` | Restore snapshot to a new sandbox instance |
 | GET | `/api/sandbox/{id}/stats` | Get statistics |
 
 ### Example: Create and Use Sandbox via API
