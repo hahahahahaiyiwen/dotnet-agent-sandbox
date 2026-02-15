@@ -690,9 +690,8 @@ public class Sandbox : IDisposable, IObservableSandbox
     {
         if (sandboxEvent is CapabilityOperationEvent capabilityEvent)
         {
-            var metadata = capabilityEvent.Metadata is null
-                ? new Dictionary<string, object?>()
-                : new Dictionary<string, object?>(capabilityEvent.Metadata);
+            var metadata = new Dictionary<string, object?>(
+                capabilityEvent.Metadata ?? new Dictionary<string, object?>());
 
             metadata["operationType"] = capabilityEvent.OperationType;
             metadata["errorCode"] = capabilityEvent.ErrorCode;

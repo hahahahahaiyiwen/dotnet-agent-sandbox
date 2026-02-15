@@ -99,6 +99,14 @@ public class SandboxMetadataJournalTests
         Assert.Equal(2, stats.CapabilityOperationCount);
     }
 
+    [Fact]
+    public void JournalOptions_MaxEntries_Throws_WhenNotPositive()
+    {
+        var options = new SandboxOperationJournalOptions();
+        Assert.Throws<ArgumentOutOfRangeException>(() => options.MaxEntries = 0);
+        Assert.Throws<ArgumentOutOfRangeException>(() => options.MaxEntries = -1);
+    }
+
     private interface IJournalTestCapability
     {
         void EmitOperation();
