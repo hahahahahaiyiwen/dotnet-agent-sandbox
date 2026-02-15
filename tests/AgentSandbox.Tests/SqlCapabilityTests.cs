@@ -334,12 +334,17 @@ public class SqlCapabilityTests
         create.CommandText = "CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT NOT NULL);";
         create.ExecuteNonQuery();
 
-        // Insert rows in batches for efficiency
+        // Insert rows efficiently using a parameterized command
         using var transaction = connection.BeginTransaction();
+        using var insert = connection.CreateCommand();
+        insert.CommandText = "INSERT INTO users(name) VALUES (@name);";
+        var nameParam = insert.CreateParameter();
+        nameParam.ParameterName = "@name";
+        insert.Parameters.Add(nameParam);
+        
         for (var i = 1; i <= rowCount; i++)
         {
-            using var insert = connection.CreateCommand();
-            insert.CommandText = $"INSERT INTO users(name) VALUES ('User{i}');";
+            nameParam.Value = $"User{i}";
             insert.ExecuteNonQuery();
         }
         transaction.Commit();

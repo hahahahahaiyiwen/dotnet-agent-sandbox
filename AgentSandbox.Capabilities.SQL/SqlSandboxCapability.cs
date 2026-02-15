@@ -111,10 +111,13 @@ public sealed class SqlSandboxCapability : ISandboxCapability, ISqlCapability, I
             }
 
             // Apply LIMIT/OFFSET in SQL to reduce database work
+            // Values are already validated as non-negative integers within bounds above
             var paginatedStatement = statement;
             if (options.Offset > 0 || limit < int.MaxValue)
             {
-                paginatedStatement = $"SELECT * FROM ({statement}) LIMIT {limit + 1} OFFSET {options.Offset}";
+                // Use string interpolation only after validation - both values are guaranteed to be valid integers
+                var limitValue = limit + 1; // Request one extra row to detect hasMore
+                paginatedStatement = $"SELECT * FROM ({statement}) LIMIT {limitValue} OFFSET {options.Offset}";
             }
 
             using var command = connection.CreateCommand();
