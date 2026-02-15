@@ -65,6 +65,14 @@ public class SandboxOptions
     /// <summary>Shell command extensions to register.</summary>
     public IEnumerable<IShellCommand> ShellExtensions { get; set; } = Array.Empty<IShellCommand>();
 
+    /// <summary>Sandbox capabilities to apply before initialization.</summary>
+    public IReadOnlyList<ISandboxCapability> Capabilities { get; set; } = [];
+
+    /// <summary>
+    /// Optional host-provided services for capability initialization and runtime integration.
+    /// </summary>
+    public IServiceProvider? Services { get; set; }
+
     /// <summary>
     /// Files to import into the sandbox filesystem at initialization.
     /// Each import specifies a destination path and file source.
@@ -105,12 +113,14 @@ public class SandboxOptions
         Environment = new Dictionary<string, string>(Environment),
         WorkingDirectory = WorkingDirectory,
         ShellExtensions = ShellExtensions.ToArray(),
+        Capabilities = Capabilities.ToArray(),
         Imports = Imports.ToArray(),
         AgentSkills = new AgentSkillOptions
         {
             BasePath = AgentSkills.BasePath
         },
         Telemetry = Telemetry,
-        SecretBroker = SecretBroker
+        SecretBroker = SecretBroker,
+        Services = Services
     };
 }

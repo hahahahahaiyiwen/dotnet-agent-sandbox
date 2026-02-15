@@ -12,7 +12,7 @@ namespace AgentSandbox.Core.Shell;
 /// Emulates common Unix commands without touching the real filesystem.
 /// Supports extensibility via IShellCommand registration.
 /// </summary>
-public class SandboxShell : IShellContext
+public class SandboxShell : IShellContext, ISandboxShellHost
 {
     #region Fields
 

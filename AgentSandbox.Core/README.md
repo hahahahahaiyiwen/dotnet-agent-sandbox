@@ -73,6 +73,30 @@ var sandbox = new Sandbox("agent-1", options);
 
 `ReadFile`, `ReadFileLines`, `WriteFile`, and `ApplyPatch` reject path inputs that contain `..` traversal segments.
 
+## Capabilities Extension Pattern
+
+`ISandboxCapability` allows extension packages to configure `SandboxOptions` without adding dependencies to core:
+
+```csharp
+using AgentSandbox.Core;
+using AgentSandbox.Extensions;
+using AgentSandbox.Core.Shell.Extensions;
+
+var options = new SandboxOptions
+{
+    Capabilities =
+    [
+        new ShellCommandsCapability([
+            new CurlCommand(),
+            new JqCommand(),
+            new GitCommand()
+        ])
+    ]
+};
+
+var sandbox = new Sandbox(options: options);
+```
+
 ## Importing Files
 
 ```csharp

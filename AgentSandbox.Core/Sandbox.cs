@@ -21,6 +21,8 @@ public class Sandbox : IDisposable, IObservableSandbox
     private readonly ObserverManager _observerManager = new();
     private readonly FileImportManager _fileImportManager;
     private readonly SkillManager _skillManager;
+    private readonly Dictionary<Type, object> _capabilities = new();
+    private readonly ISandboxTelemetry _sandboxTelemetry;
     private readonly List<ShellResult> _commandHistory = new();
     private readonly Action<string>? _onDisposed;
     private readonly Activity? _sandboxActivity;
@@ -35,7 +37,7 @@ public class Sandbox : IDisposable, IObservableSandbox
     internal Sandbox(string? id, SandboxOptions? options, Action<string>? onDisposed)
     {
         Id = id ?? Guid.NewGuid().ToString("N")[..12];
-        _options = options ?? new SandboxOptions();
+        _options = (options ?? new SandboxOptions()).Clone();
         _onDisposed = onDisposed;
         
         // Create filesystem with size limits from options
@@ -58,6 +60,7 @@ public class Sandbox : IDisposable, IObservableSandbox
 
         // Initialize telemetry facade
         _telemetry = new SandboxTelemetryFacade(_options, Id, _observerManager.NotifyObservers);
+        _sandboxTelemetry = new SandboxTelemetryView(TelemetryEnabled);
         
         // Start sandbox-level activity for tracing
         if (TelemetryEnabled)
@@ -86,6 +89,8 @@ public class Sandbox : IDisposable, IObservableSandbox
             _shell.RegisterCommand(cmd);
         }
 
+        InitializeCapabilities();
+
         // Import all files (including skills) from configured sources
         foreach (var import in _options.Imports)
         {
@@ -108,6 +113,83 @@ public class Sandbox : IDisposable, IObservableSandbox
     /// Gets the current working directory of the sandbox shell.
     /// </summary>
     public string CurrentDirectory => _shell.CurrentDirectory;
+
+    #endregion
+
+    #region Capabilities
+
+    /// <summary>
+    /// Gets a registered capability implementation by interface type.
+    /// </summary>
+    public TCapability GetCapability<TCapability>() where TCapability : class
+    {
+        ThrowIfDisposed();
+        if (TryGetCapability<TCapability>(out var capability))
+        {
+            return capability!;
+        }
+
+        throw new InvalidOperationException($"Capability '{typeof(TCapability).Name}' is not registered.");
+    }
+
+    /// <summary>
+    /// Tries to get a registered capability implementation by interface type.
+    /// </summary>
+    public bool TryGetCapability<TCapability>(out TCapability? capability) where TCapability : class
+    {
+        ThrowIfDisposed();
+        if (_capabilities.TryGetValue(typeof(TCapability), out var instance))
+        {
+            capability = (TCapability)instance;
+            return true;
+        }
+
+        capability = null;
+        return false;
+    }
+
+    private void InitializeCapabilities()
+    {
+        if (_options.Capabilities.Count == 0)
+        {
+            return;
+        }
+
+        foreach (var capability in _options.Capabilities)
+        {
+            RegisterCapabilityInterfaces(capability);
+        }
+
+        var context = new SandboxContext(_options, _fileSystem, _shell, _sandboxTelemetry, _capabilities);
+        foreach (var capability in _options.Capabilities)
+        {
+            capability.Initialize(context);
+        }
+    }
+
+    private void RegisterCapabilityInterfaces(ISandboxCapability capability)
+    {
+        var capabilityType = capability.GetType();
+        _capabilities[capabilityType] = capability;
+
+        foreach (var iface in capabilityType.GetInterfaces())
+        {
+            if (iface == typeof(ISandboxCapability) ||
+                iface == typeof(IDisposable) ||
+                iface == typeof(IAsyncDisposable))
+            {
+                continue;
+            }
+
+            if (_capabilities.TryGetValue(iface, out var existing) && !ReferenceEquals(existing, capability))
+            {
+                throw new InvalidOperationException(
+                    $"Capability interface '{iface.Name}' is already registered by '{existing.GetType().Name}'.");
+            }
+
+            _capabilities[iface] = capability;
+        }
+    }
 
     #endregion
 
@@ -576,4 +658,57 @@ public class Sandbox : IDisposable, IObservableSandbox
     }
 
     #endregion
+
+    private sealed class SandboxContext : ISandboxContext
+    {
+        private readonly IReadOnlyDictionary<Type, object> _capabilities;
+
+        public SandboxContext(
+            SandboxOptions options,
+            FileSystem.FileSystem fileSystem,
+            SandboxShell shell,
+            ISandboxTelemetry telemetry,
+            IReadOnlyDictionary<Type, object> capabilities)
+        {
+            Options = options;
+            FileSystem = fileSystem;
+            Shell = shell;
+            Telemetry = telemetry;
+            Services = options.Services;
+            _capabilities = capabilities;
+        }
+
+        public SandboxOptions Options { get; }
+        public IFileSystem FileSystem { get; }
+        public ISandboxShellHost Shell { get; }
+        public ISandboxTelemetry Telemetry { get; }
+        public IServiceProvider? Services { get; }
+
+        public TCapability GetCapability<TCapability>() where TCapability : class
+        {
+            if (TryGetCapability<TCapability>(out var capability))
+            {
+                return capability!;
+            }
+
+            throw new InvalidOperationException($"Capability '{typeof(TCapability).Name}' is not registered.");
+        }
+
+        public bool TryGetCapability<TCapability>(out TCapability? capability) where TCapability : class
+        {
+            if (_capabilities.TryGetValue(typeof(TCapability), out var instance))
+            {
+                capability = (TCapability)instance;
+                return true;
+            }
+
+            capability = null;
+            return false;
+        }
+    }
+
+    private sealed class SandboxTelemetryView(bool enabled) : ISandboxTelemetry
+    {
+        public bool Enabled { get; } = enabled;
+    }
 }
