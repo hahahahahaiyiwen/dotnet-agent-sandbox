@@ -64,6 +64,7 @@ public record StatsResponse(
     int FileCount,
     long TotalSize,
     int CommandCount,
+    int CapabilityOperationCount,
     string CurrentDirectory,
     DateTime CreatedAt,
     DateTime LastActivityAt

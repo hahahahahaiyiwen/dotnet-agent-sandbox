@@ -4,6 +4,7 @@ using AgentSandbox.Core.Security;
 using AgentSandbox.Core.Shell;
 using AgentSandbox.Core.Skills;
 using AgentSandbox.Core.Telemetry;
+using AgentSandbox.Core.Metadata;
 
 namespace AgentSandbox.Core;
 
@@ -101,6 +102,11 @@ public class SandboxOptions
     public ISecretBroker? SecretBroker { get; set; }
 
     /// <summary>
+    /// Metadata journal retention options.
+    /// </summary>
+    public SandboxOperationJournalOptions Journal { get; set; } = new();
+
+    /// <summary>
     /// Creates a shallow copy of this options instance.
     /// Capability instances are reused across clones; they should be stateless or re-initialization safe.
     /// </summary>
@@ -123,6 +129,11 @@ public class SandboxOptions
         },
         Telemetry = Telemetry,
         SecretBroker = SecretBroker,
+        Journal = new SandboxOperationJournalOptions
+        {
+            MaxEntries = Journal.MaxEntries,
+            TruncationStrategy = Journal.TruncationStrategy
+        },
         Services = Services
     };
 }

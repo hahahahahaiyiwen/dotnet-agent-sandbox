@@ -204,6 +204,8 @@ using var subscription = sandbox.Subscribe(myObserver);
 
 Telemetry hooks live in `AgentSandbox.Core.Telemetry` and are configured via `SandboxOptions.Telemetry`.
 
+`GetHistory()` and `GetStats()` are projection views over a centralized metadata journal that tracks shell and capability operations. Journal retention is configurable through `SandboxOptions.Journal`.
+
 ## See Also
 
 - [AgentSandbox.Extensions](../AgentSandbox.Extensions) - Shell extensions (curl, git, jq) and Semantic Kernel integration

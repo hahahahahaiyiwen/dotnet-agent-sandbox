@@ -9,6 +9,7 @@ public class SandboxStats
     public int FileCount { get; set; }
     public long TotalSize { get; set; }
     public int CommandCount { get; set; }
+    public int CapabilityOperationCount { get; set; }
     public string CurrentDirectory { get; set; } = "/";
     public DateTime CreatedAt { get; set; }
     public DateTime LastActivityAt { get; set; }

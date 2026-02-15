@@ -1,9 +1,13 @@
 namespace AgentSandbox.Core.Telemetry;
 
-internal sealed class SandboxEventEmitter(Action<Action<ISandboxObserver>> notifyObservers) : ISandboxEventEmitter
+internal sealed class SandboxEventEmitter(
+    Action<Action<ISandboxObserver>> notifyObservers,
+    Action<SandboxEvent>? onEmit = null) : ISandboxEventEmitter
 {
     public void Emit(SandboxEvent sandboxEvent)
     {
+        onEmit?.Invoke(sandboxEvent);
+
         notifyObservers(observer =>
         {
             observer.OnEvent(sandboxEvent);
