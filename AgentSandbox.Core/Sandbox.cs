@@ -163,7 +163,7 @@ public class Sandbox : IDisposable, IObservableSandbox
             RegisterCapabilityInterfaces(capability);
         }
 
-        var context = new SandboxContext(_options, _fileSystem, _shell, _eventEmitter, _capabilities);
+        var context = new SandboxContext(Id, _options, _fileSystem, _shell, _eventEmitter, _capabilities);
         foreach (var capability in _options.Capabilities)
         {
             capability.Initialize(context);
@@ -738,12 +738,14 @@ public class Sandbox : IDisposable, IObservableSandbox
         private readonly IReadOnlyDictionary<Type, object> _capabilities;
 
         public SandboxContext(
+            string sandboxId,
             SandboxOptions options,
             FileSystem.FileSystem fileSystem,
             SandboxShell shell,
             ISandboxEventEmitter eventEmitter,
             IReadOnlyDictionary<Type, object> capabilities)
         {
+            SandboxId = sandboxId;
             Options = options;
             FileSystem = fileSystem;
             Shell = shell;
@@ -752,6 +754,7 @@ public class Sandbox : IDisposable, IObservableSandbox
             _capabilities = capabilities;
         }
 
+        public string SandboxId { get; }
         public SandboxOptions Options { get; }
         public IFileSystem FileSystem { get; }
         public ISandboxShellHost Shell { get; }

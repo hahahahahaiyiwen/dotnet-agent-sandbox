@@ -1,4 +1,3 @@
-﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 17
 VisualStudioVersion = 17.0.31903.59
@@ -24,6 +23,8 @@ EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AgentSandbox.Tests", "tests\AgentSandbox.Tests\AgentSandbox.Tests.csproj", "{AFBB18F0-9C29-46BA-B0FE-CA70F430FE48}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AgentSandbox.Benchmarks", "tests\AgentSandbox.Benchmarks\AgentSandbox.Benchmarks.csproj", "{1CCE1107-30C7-40EC-9102-227673D7E9B4}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AgentSandbox.Capabilities.SQL", "AgentSandbox.Capabilities.SQL\AgentSandbox.Capabilities.SQL.csproj", "{7E2936F1-10AE-44B7-903F-D6BF750D2B9D}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -119,6 +120,18 @@ Global
 		{1CCE1107-30C7-40EC-9102-227673D7E9B4}.Release|x64.Build.0 = Release|Any CPU
 		{1CCE1107-30C7-40EC-9102-227673D7E9B4}.Release|x86.ActiveCfg = Release|Any CPU
 		{1CCE1107-30C7-40EC-9102-227673D7E9B4}.Release|x86.Build.0 = Release|Any CPU
+		{7E2936F1-10AE-44B7-903F-D6BF750D2B9D}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{7E2936F1-10AE-44B7-903F-D6BF750D2B9D}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{7E2936F1-10AE-44B7-903F-D6BF750D2B9D}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{7E2936F1-10AE-44B7-903F-D6BF750D2B9D}.Debug|x64.Build.0 = Debug|Any CPU
+		{7E2936F1-10AE-44B7-903F-D6BF750D2B9D}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{7E2936F1-10AE-44B7-903F-D6BF750D2B9D}.Debug|x86.Build.0 = Debug|Any CPU
+		{7E2936F1-10AE-44B7-903F-D6BF750D2B9D}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{7E2936F1-10AE-44B7-903F-D6BF750D2B9D}.Release|Any CPU.Build.0 = Release|Any CPU
+		{7E2936F1-10AE-44B7-903F-D6BF750D2B9D}.Release|x64.ActiveCfg = Release|Any CPU
+		{7E2936F1-10AE-44B7-903F-D6BF750D2B9D}.Release|x64.Build.0 = Release|Any CPU
+		{7E2936F1-10AE-44B7-903F-D6BF750D2B9D}.Release|x86.ActiveCfg = Release|Any CPU
+		{7E2936F1-10AE-44B7-903F-D6BF750D2B9D}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -132,3 +145,4 @@ Global
 		{1CCE1107-30C7-40EC-9102-227673D7E9B4} = {0AB3BF05-4346-4AA6-1389-037BE0695223}
 	EndGlobalSection
 EndGlobal
+
