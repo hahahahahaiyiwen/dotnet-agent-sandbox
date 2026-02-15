@@ -110,8 +110,15 @@ public sealed class SqlSandboxCapability : ISandboxCapability, ISqlCapability, I
                 readOnlyCommand.ExecuteNonQuery();
             }
 
+            // Apply LIMIT/OFFSET in SQL to reduce database work
+            var paginatedStatement = statement;
+            if (options.Offset > 0 || limit < int.MaxValue)
+            {
+                paginatedStatement = $"SELECT * FROM ({statement}) LIMIT {limit + 1} OFFSET {options.Offset}";
+            }
+
             using var command = connection.CreateCommand();
-            command.CommandText = statement;
+            command.CommandText = paginatedStatement;
             command.CommandTimeout = Math.Max(1, (int)Math.Ceiling(_options.Timeout.TotalSeconds));
 
             using var reader = command.ExecuteReader();
@@ -119,17 +126,11 @@ public sealed class SqlSandboxCapability : ISandboxCapability, ISqlCapability, I
 
             var rows = new List<IReadOnlyDictionary<string, object?>>();
             var responseBytes = 0;
-            var skipped = 0;
             var hasMore = false;
 
             while (reader.Read())
             {
-                if (skipped < options.Offset)
-                {
-                    skipped++;
-                    continue;
-                }
-
+                // Check if we've hit the limit (we requested limit+1 to detect hasMore)
                 if (rows.Count >= limit)
                 {
                     hasMore = true;

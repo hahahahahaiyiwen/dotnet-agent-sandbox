@@ -227,6 +227,32 @@ public class SqlCapabilityTests
     }
 
     [Fact]
+    public void ExecuteSql_AppliesLimitAndOffsetInSql()
+    {
+        var dbPath = CreateDatabaseWithManyRows(100);
+        try
+        {
+            using (var sandbox = CreateSandbox(dbPath, out _))
+            {
+                var capability = sandbox.GetCapability<ISqlCapability>();
+                
+                // Request page 2 (offset 10, limit 5)
+                var result = capability.ExecuteSql("SELECT id FROM users ORDER BY id", new SqlQueryOptions { Limit = 5, Offset = 10 });
+                
+                // Should return rows 11-15 (ids are 1-based)
+                Assert.Equal(5, result.Rows.Count);
+                Assert.Equal(11L, result.Rows[0]["id"]);
+                Assert.Equal(15L, result.Rows[4]["id"]);
+                Assert.True(result.HasMore); // More rows available
+            }
+        }
+        finally
+        {
+            File.Delete(dbPath);
+        }
+    }
+
+    [Fact]
     public void ExecuteSql_SupportsSharedInMemory_WhenUsingConnectionFactory()
     {
         var sharedName = $"memdb-{Guid.NewGuid():N}";
@@ -294,6 +320,29 @@ public class SqlCapabilityTests
         using var insert = connection.CreateCommand();
         insert.CommandText = "INSERT INTO users(name) VALUES ('Ada'), ('Linus');";
         insert.ExecuteNonQuery();
+
+        return path;
+    }
+
+    private static string CreateDatabaseWithManyRows(int rowCount)
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"agent-sandbox-db-{Guid.NewGuid():N}.db");
+        using var connection = new SqliteConnection($"Data Source={path};Pooling=False");
+        connection.Open();
+
+        using var create = connection.CreateCommand();
+        create.CommandText = "CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT NOT NULL);";
+        create.ExecuteNonQuery();
+
+        // Insert rows in batches for efficiency
+        using var transaction = connection.BeginTransaction();
+        for (var i = 1; i <= rowCount; i++)
+        {
+            using var insert = connection.CreateCommand();
+            insert.CommandText = $"INSERT INTO users(name) VALUES ('User{i}');";
+            insert.ExecuteNonQuery();
+        }
+        transaction.Commit();
 
         return path;
     }
