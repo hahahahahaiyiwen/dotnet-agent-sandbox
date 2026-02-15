@@ -1,4 +1,5 @@
 using AgentSandbox.Core.FileSystem;
+using AgentSandbox.Core.Capabilities;
 using AgentSandbox.Core.Importing;
 using AgentSandbox.Core.Shell;
 using AgentSandbox.Core.Skills;
@@ -21,6 +22,8 @@ public class Sandbox : IDisposable, IObservableSandbox
     private readonly ObserverManager _observerManager = new();
     private readonly FileImportManager _fileImportManager;
     private readonly SkillManager _skillManager;
+    private readonly Dictionary<Type, object> _capabilities = new();
+    private readonly ISandboxEventEmitter _eventEmitter;
     private readonly List<ShellResult> _commandHistory = new();
     private readonly Action<string>? _onDisposed;
     private readonly Activity? _sandboxActivity;
@@ -35,7 +38,7 @@ public class Sandbox : IDisposable, IObservableSandbox
     internal Sandbox(string? id, SandboxOptions? options, Action<string>? onDisposed)
     {
         Id = id ?? Guid.NewGuid().ToString("N")[..12];
-        _options = options ?? new SandboxOptions();
+        _options = (options ?? new SandboxOptions()).Clone();
         _onDisposed = onDisposed;
         
         // Create filesystem with size limits from options
@@ -57,12 +60,13 @@ public class Sandbox : IDisposable, IObservableSandbox
         LastActivityAt = CreatedAt;
 
         // Initialize telemetry facade
-        _telemetry = new SandboxTelemetryFacade(_options, Id, _observerManager.NotifyObservers);
+        _eventEmitter = new SandboxEventEmitter(_observerManager.NotifyObservers);
+        _telemetry = new SandboxTelemetryFacade(_options, Id, _eventEmitter);
         
         // Start sandbox-level activity for tracing
         if (TelemetryEnabled)
         {
-            _sandboxActivity = SandboxTelemetry.StartSandboxActivity(Id);
+            _sandboxActivity = SandboxTelemetryHelper.StartSandboxActivity(Id);
             _telemetry.RecordSandboxCreated();
         }
 
@@ -86,6 +90,8 @@ public class Sandbox : IDisposable, IObservableSandbox
             _shell.RegisterCommand(cmd);
         }
 
+        InitializeCapabilities();
+
         // Import all files (including skills) from configured sources
         foreach (var import in _options.Imports)
         {
@@ -108,6 +114,83 @@ public class Sandbox : IDisposable, IObservableSandbox
     /// Gets the current working directory of the sandbox shell.
     /// </summary>
     public string CurrentDirectory => _shell.CurrentDirectory;
+
+    #endregion
+
+    #region Capabilities
+
+    /// <summary>
+    /// Gets a registered capability implementation by interface type.
+    /// </summary>
+    public TCapability GetCapability<TCapability>() where TCapability : class
+    {
+        ThrowIfDisposed();
+        if (TryGetCapability<TCapability>(out var capability))
+        {
+            return capability!;
+        }
+
+        throw new InvalidOperationException($"Capability '{typeof(TCapability).Name}' is not registered.");
+    }
+
+    /// <summary>
+    /// Tries to get a registered capability implementation by interface type.
+    /// </summary>
+    public bool TryGetCapability<TCapability>(out TCapability? capability) where TCapability : class
+    {
+        ThrowIfDisposed();
+        if (_capabilities.TryGetValue(typeof(TCapability), out var instance))
+        {
+            capability = (TCapability)instance;
+            return true;
+        }
+
+        capability = null;
+        return false;
+    }
+
+    private void InitializeCapabilities()
+    {
+        if (_options.Capabilities.Count == 0)
+        {
+            return;
+        }
+
+        foreach (var capability in _options.Capabilities)
+        {
+            RegisterCapabilityInterfaces(capability);
+        }
+
+        var context = new SandboxContext(_options, _fileSystem, _shell, _eventEmitter, _capabilities);
+        foreach (var capability in _options.Capabilities)
+        {
+            capability.Initialize(context);
+        }
+    }
+
+    private void RegisterCapabilityInterfaces(ISandboxCapability capability)
+    {
+        var capabilityType = capability.GetType();
+        _capabilities[capabilityType] = capability;
+
+        foreach (var iface in capabilityType.GetInterfaces())
+        {
+            if (iface == typeof(ISandboxCapability) ||
+                iface == typeof(IDisposable) ||
+                iface == typeof(IAsyncDisposable))
+            {
+                continue;
+            }
+
+            if (_capabilities.TryGetValue(iface, out var existing) && !ReferenceEquals(existing, capability))
+            {
+                throw new InvalidOperationException(
+                    $"Capability interface '{iface.Name}' is already registered by '{existing.GetType().Name}'.");
+            }
+
+            _capabilities[iface] = capability;
+        }
+    }
 
     #endregion
 
@@ -566,6 +649,27 @@ public class Sandbox : IDisposable, IObservableSandbox
             _sandboxActivity?.Dispose();
         }
 
+        var disposedCapabilities = new HashSet<object>(ReferenceEqualityComparer.Instance);
+        foreach (var capability in _capabilities.Values)
+        {
+            if (!disposedCapabilities.Add(capability))
+            {
+                continue;
+            }
+
+            if (capability is IDisposable disposable)
+            {
+                disposable.Dispose();
+                continue;
+            }
+
+            if (capability is IAsyncDisposable asyncDisposable)
+            {
+                asyncDisposable.DisposeAsync().AsTask().GetAwaiter().GetResult();
+            }
+        }
+
+        _capabilities.Clear();
         _commandHistory.Clear();
         _observerManager.Clear();
         
@@ -573,6 +677,58 @@ public class Sandbox : IDisposable, IObservableSandbox
         _onDisposed?.Invoke(Id);
         
         GC.SuppressFinalize(this);
+    }
+
+    #endregion
+
+    #region Sandbox Context Implementation
+
+    private sealed class SandboxContext : ISandboxContext
+    {
+        private readonly IReadOnlyDictionary<Type, object> _capabilities;
+
+        public SandboxContext(
+            SandboxOptions options,
+            FileSystem.FileSystem fileSystem,
+            SandboxShell shell,
+            ISandboxEventEmitter eventEmitter,
+            IReadOnlyDictionary<Type, object> capabilities)
+        {
+            Options = options;
+            FileSystem = fileSystem;
+            Shell = shell;
+            EventEmitter = eventEmitter;
+            Services = options.Services;
+            _capabilities = capabilities;
+        }
+
+        public SandboxOptions Options { get; }
+        public IFileSystem FileSystem { get; }
+        public ISandboxShellHost Shell { get; }
+        public ISandboxEventEmitter EventEmitter { get; }
+        public IServiceProvider? Services { get; }
+
+        public TCapability GetCapability<TCapability>() where TCapability : class
+        {
+            if (TryGetCapability<TCapability>(out var capability))
+            {
+                return capability!;
+            }
+
+            throw new InvalidOperationException($"Capability '{typeof(TCapability).Name}' is not registered.");
+        }
+
+        public bool TryGetCapability<TCapability>(out TCapability? capability) where TCapability : class
+        {
+            if (_capabilities.TryGetValue(typeof(TCapability), out var instance))
+            {
+                capability = (TCapability)instance;
+                return true;
+            }
+
+            capability = null;
+            return false;
+        }
     }
 
     #endregion

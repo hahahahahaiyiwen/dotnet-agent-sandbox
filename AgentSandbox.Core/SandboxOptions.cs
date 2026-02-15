@@ -1,4 +1,5 @@
 using AgentSandbox.Core.Importing;
+using AgentSandbox.Core.Capabilities;
 using AgentSandbox.Core.Security;
 using AgentSandbox.Core.Shell;
 using AgentSandbox.Core.Skills;
@@ -65,6 +66,14 @@ public class SandboxOptions
     /// <summary>Shell command extensions to register.</summary>
     public IEnumerable<IShellCommand> ShellExtensions { get; set; } = Array.Empty<IShellCommand>();
 
+    /// <summary>Sandbox capabilities to initialize during sandbox construction (after ShellExtensions registration, before file imports).</summary>
+    public IReadOnlyList<ISandboxCapability> Capabilities { get; set; } = [];
+
+    /// <summary>
+    /// Optional host-provided services for capability initialization and runtime integration.
+    /// </summary>
+    public IServiceProvider? Services { get; set; }
+
     /// <summary>
     /// Files to import into the sandbox filesystem at initialization.
     /// Each import specifies a destination path and file source.
@@ -93,6 +102,7 @@ public class SandboxOptions
 
     /// <summary>
     /// Creates a shallow copy of this options instance.
+    /// Capability instances are reused across clones; they should be stateless or re-initialization safe.
     /// </summary>
     public SandboxOptions Clone() => new()
     {
@@ -105,12 +115,14 @@ public class SandboxOptions
         Environment = new Dictionary<string, string>(Environment),
         WorkingDirectory = WorkingDirectory,
         ShellExtensions = ShellExtensions.ToArray(),
+        Capabilities = Capabilities.ToArray(),
         Imports = Imports.ToArray(),
         AgentSkills = new AgentSkillOptions
         {
             BasePath = AgentSkills.BasePath
         },
         Telemetry = Telemetry,
-        SecretBroker = SecretBroker
+        SecretBroker = SecretBroker,
+        Services = Services
     };
 }

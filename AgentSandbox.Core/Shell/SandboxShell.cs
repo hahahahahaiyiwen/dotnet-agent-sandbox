@@ -1,4 +1,5 @@
 using AgentSandbox.Core.FileSystem;
+using AgentSandbox.Core.Capabilities;
 using AgentSandbox.Core.Security;
 using AgentSandbox.Core.Shell.Commands;
 using System.Diagnostics;
@@ -12,7 +13,7 @@ namespace AgentSandbox.Core.Shell;
 /// Emulates common Unix commands without touching the real filesystem.
 /// Supports extensibility via IShellCommand registration.
 /// </summary>
-public class SandboxShell : IShellContext
+public class SandboxShell : IShellContext, ISandboxShellHost
 {
     #region Fields
 

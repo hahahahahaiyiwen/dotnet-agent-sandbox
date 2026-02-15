@@ -7,6 +7,11 @@ namespace AgentSandbox.Core.Telemetry;
 public interface ISandboxObserver
 {
     /// <summary>
+    /// Called when any sandbox event is emitted.
+    /// </summary>
+    void OnEvent(SandboxEvent e) { }
+
+    /// <summary>
     /// Called when a command is executed.
     /// </summary>
     void OnCommandExecuted(CommandExecutedEvent e);
@@ -51,6 +56,7 @@ public interface IObservableSandbox
 /// </summary>
 public abstract class SandboxObserverBase : ISandboxObserver
 {
+    public virtual void OnEvent(SandboxEvent e) { }
     public virtual void OnCommandExecuted(CommandExecutedEvent e) { }
     public virtual void OnFileChanged(FileChangedEvent e) { }
     public virtual void OnSkillInvoked(SkillInvokedEvent e) { }
@@ -68,14 +74,17 @@ public class DelegateSandboxObserver : ISandboxObserver
     private readonly Action<SkillInvokedEvent>? _onSkillInvoked;
     private readonly Action<SandboxLifecycleEvent>? _onLifecycleEvent;
     private readonly Action<SandboxErrorEvent>? _onError;
+    private readonly Action<SandboxEvent>? _onEvent;
 
     public DelegateSandboxObserver(
+        Action<SandboxEvent>? onEvent = null,
         Action<CommandExecutedEvent>? onCommandExecuted = null,
         Action<FileChangedEvent>? onFileChanged = null,
         Action<SkillInvokedEvent>? onSkillInvoked = null,
         Action<SandboxLifecycleEvent>? onLifecycleEvent = null,
         Action<SandboxErrorEvent>? onError = null)
     {
+        _onEvent = onEvent;
         _onCommandExecuted = onCommandExecuted;
         _onFileChanged = onFileChanged;
         _onSkillInvoked = onSkillInvoked;
@@ -83,6 +92,7 @@ public class DelegateSandboxObserver : ISandboxObserver
         _onError = onError;
     }
 
+    public void OnEvent(SandboxEvent e) => _onEvent?.Invoke(e);
     public void OnCommandExecuted(CommandExecutedEvent e) => _onCommandExecuted?.Invoke(e);
     public void OnFileChanged(FileChangedEvent e) => _onFileChanged?.Invoke(e);
     public void OnSkillInvoked(SkillInvokedEvent e) => _onSkillInvoked?.Invoke(e);
