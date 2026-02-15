@@ -104,6 +104,31 @@ public class SandboxManager : IDisposable
     }
 
     /// <summary>
+    /// Releases an active sandbox by persisting a snapshot and disposing the sandbox.
+    /// </summary>
+    public string Release(string sandboxId)
+    {
+        ThrowIfDisposed();
+        EnsureSnapshotStoreConfigured();
+
+        Sandbox sandbox;
+        string snapshotId;
+        lock (_sync)
+        {
+            if (!_sandboxes.TryGetValue(sandboxId, out sandbox!))
+            {
+                throw new KeyNotFoundException($"Sandbox '{sandboxId}' not found.");
+            }
+
+            snapshotId = _snapshotStore!.Save(sandbox.CreateSnapshot());
+            _sandboxes.TryRemove(sandboxId, out _);
+        }
+
+        sandbox.Dispose();
+        return snapshotId;
+    }
+
+    /// <summary>
     /// Called when a sandbox is disposed directly.
     /// </summary>
     private void OnSandboxDisposed(string id)

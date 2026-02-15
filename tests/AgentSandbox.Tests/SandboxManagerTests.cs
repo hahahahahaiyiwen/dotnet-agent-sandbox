@@ -182,6 +182,40 @@ public class SandboxManagerTests
     }
 
     [Fact]
+    public void Release_PersistsSnapshot_And_DisposesSandbox()
+    {
+        var store = new InMemorySnapshotStore();
+        var manager = new SandboxManager(
+            defaultOptions: null,
+            managerOptions: new SandboxManagerOptions
+            {
+                SnapshotStore = store,
+                MaxActiveSandboxes = 2
+            });
+        var sandbox = manager.Get();
+        sandbox.Execute("echo 'release-state' > /state.txt");
+
+        var snapshotId = manager.Release(sandbox.Id);
+
+        Assert.Throws<ObjectDisposedException>(() => sandbox.Execute("pwd"));
+        var restored = manager.RestoreSnapshot(snapshotId);
+        var restoredResult = restored.Execute("cat /state.txt");
+
+        Assert.NotEmpty(snapshotId);
+        Assert.Equal("release-state", restoredResult.Stdout.Trim());
+    }
+
+    [Fact]
+    public void Release_WithoutStoreConfigured_Throws()
+    {
+        var manager = new SandboxManager();
+        var sandbox = manager.Get();
+
+        var ex = Assert.Throws<InvalidOperationException>(() => manager.Release(sandbox.Id));
+        Assert.Contains("Snapshot store is not configured", ex.Message);
+    }
+
+    [Fact]
     public void Execute_UsesDefaultCommandTimeout_FromDefaultOptions()
     {
         var options = new SandboxOptions

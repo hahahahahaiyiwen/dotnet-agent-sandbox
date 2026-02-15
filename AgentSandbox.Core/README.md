@@ -202,6 +202,9 @@ var manager = new SandboxManager(
 var sandbox = manager.Get();
 var snapshotId = manager.SaveSnapshot(sandbox.Id);
 var restoredSandbox = manager.RestoreSnapshot(snapshotId); // new sandbox ID
+
+// Persist and release in one lifecycle call
+var releasedSnapshotId = manager.Release(restoredSandbox.Id);
 ```
 
 ## History and Observability
