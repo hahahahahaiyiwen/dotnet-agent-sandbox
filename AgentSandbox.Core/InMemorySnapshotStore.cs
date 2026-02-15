@@ -13,9 +13,19 @@ public sealed class InMemorySnapshotStore : ISnapshotStore
     {
         ArgumentNullException.ThrowIfNull(snapshot);
 
-        var snapshotId = Guid.NewGuid().ToString("N")[..12];
-        _snapshots[snapshotId] = Clone(snapshot);
-        return snapshotId;
+        var clonedSnapshot = Clone(snapshot);
+
+        const int maxAttempts = 10;
+        for (var attempt = 0; attempt < maxAttempts; attempt++)
+        {
+            var snapshotId = Guid.NewGuid().ToString("N")[..12];
+            if (_snapshots.TryAdd(snapshotId, clonedSnapshot))
+            {
+                return snapshotId;
+            }
+        }
+
+        throw new InvalidOperationException("Failed to generate a unique snapshot ID after multiple attempts.");
     }
 
     public bool TryGet(string snapshotId, out SandboxSnapshot? snapshot)

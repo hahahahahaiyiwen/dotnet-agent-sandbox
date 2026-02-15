@@ -74,12 +74,15 @@ public class SandboxManager : IDisposable
         ThrowIfDisposed();
         EnsureSnapshotStoreConfigured();
 
-        if (!_sandboxes.TryGetValue(sandboxId, out var sandbox))
+        lock (_sync)
         {
-            throw new KeyNotFoundException($"Sandbox '{sandboxId}' not found.");
-        }
+            if (!_sandboxes.TryGetValue(sandboxId, out var sandbox))
+            {
+                throw new KeyNotFoundException($"Sandbox '{sandboxId}' not found.");
+            }
 
-        return _snapshotStore!.Save(sandbox.CreateSnapshot());
+            return _snapshotStore!.Save(sandbox.CreateSnapshot());
+        }
     }
 
     /// <summary>

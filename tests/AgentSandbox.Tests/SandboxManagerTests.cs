@@ -173,6 +173,15 @@ public class SandboxManagerTests
     }
 
     [Fact]
+    public void RestoreSnapshot_WithoutStoreConfigured_Throws()
+    {
+        var manager = new SandboxManager();
+
+        var ex = Assert.Throws<InvalidOperationException>(() => manager.RestoreSnapshot("snapshot-id"));
+        Assert.Contains("Snapshot store is not configured", ex.Message);
+    }
+
+    [Fact]
     public void Execute_UsesDefaultCommandTimeout_FromDefaultOptions()
     {
         var options = new SandboxOptions

@@ -9,6 +9,7 @@ namespace AgentSandbox.Api.Endpoints;
 public static class SandboxEndpoints
 {
     private static readonly ConcurrentDictionary<string, Sandbox> _activeSandboxes = new();
+    private static readonly object _activeSandboxesSync = new();
 
     public static void MapSandboxEndpoints(this WebApplication app)
     {
@@ -299,15 +300,18 @@ public static class SandboxEndpoints
 
         try
         {
-            var snapshot = sandbox.CreateSnapshot();
             var snapshotId = manager.SaveSnapshot(id);
 
             return Results.Ok(new SnapshotResponse(
                 snapshotId,
                 sandbox.Id,
-                snapshot.CreatedAt,
-                snapshot.FileSystemData.Length
+                DateTime.UtcNow,
+                0
             ));
+        }
+        catch (KeyNotFoundException ex)
+        {
+            return Results.NotFound(new ErrorResponse(ex.Message, 404));
         }
         catch (InvalidOperationException ex)
         {
@@ -327,9 +331,17 @@ public static class SandboxEndpoints
         try
         {
             var restored = manager.RestoreSnapshot(snapshotId);
-            _activeSandboxes[restored.Id] = restored;
-            _activeSandboxes.TryRemove(id, out _);
-            sandbox.Dispose();
+
+            lock (_activeSandboxesSync)
+            {
+                if (_activeSandboxes.TryRemove(id, out var existing))
+                {
+                    existing.Dispose();
+                }
+
+                _activeSandboxes[restored.Id] = restored;
+            }
+
             return Results.Ok(new { restored = true, snapshotId, sandboxId = restored.Id });
         }
         catch (KeyNotFoundException ex)
