@@ -5,6 +5,7 @@ using AgentSandbox.Core.Shell;
 using AgentSandbox.Core.Skills;
 using AgentSandbox.Core.Telemetry;
 using AgentSandbox.Core.Validation;
+using AgentSandbox.Core.Metadata;
 using System.Diagnostics;
 using System.Text;
 
@@ -24,7 +25,7 @@ public class Sandbox : IDisposable, IObservableSandbox
     private readonly SkillManager _skillManager;
     private readonly Dictionary<Type, object> _capabilities = new();
     private readonly ISandboxEventEmitter _eventEmitter;
-    private readonly List<ShellResult> _commandHistory = new();
+    private readonly SandboxOperationJournal _operationJournal;
     private readonly Action<string>? _onDisposed;
     private readonly Activity? _sandboxActivity;
     private bool _disposed;
@@ -55,12 +56,13 @@ public class Sandbox : IDisposable, IObservableSandbox
         _shell = new SandboxShell(_fileSystem, _options.SecretBroker);
         _fileImportManager = new FileImportManager(_fileSystem);
         _skillManager = new SkillManager(_fileSystem);
+        _operationJournal = new SandboxOperationJournal(_options.Journal);
 
         CreatedAt = DateTime.UtcNow;
         LastActivityAt = CreatedAt;
 
         // Initialize telemetry facade
-        _eventEmitter = new SandboxEventEmitter(_observerManager.NotifyObservers);
+        _eventEmitter = new SandboxEventEmitter(_observerManager.NotifyObservers, HandleSandboxEvent);
         _telemetry = new SandboxTelemetryFacade(_options, Id, _eventEmitter);
         
         // Start sandbox-level activity for tracing
@@ -218,14 +220,14 @@ public class Sandbox : IDisposable, IObservableSandbox
                 var timeoutResult = ShellResult.Error($"Command execution timed out after {_options.CommandTimeout.TotalMilliseconds} ms.");
                 timeoutResult.Command = command;
                 timeoutResult.Duration = stopwatch.Elapsed;
-                _commandHistory.Add(timeoutResult);
+                AppendShellOperation(timeoutResult);
                 _telemetry.RecordCommandError(new TimeoutException(timeoutResult.Stderr));
                 return timeoutResult;
             }
 
             var result = executionTask.GetAwaiter().GetResult();
             result = _shell.RedactSecrets(result);
-            _commandHistory.Add(result);
+            AppendShellOperation(result);
             stopwatch.Stop();
 
             _telemetry.RecordCommandSuccess(command, result, stopwatch.Elapsed);
@@ -595,7 +597,7 @@ public class Sandbox : IDisposable, IObservableSandbox
     /// <summary>
     /// Gets command execution history.
     /// </summary>
-    public IReadOnlyList<ShellResult> GetHistory() => _commandHistory.AsReadOnly();
+    public IReadOnlyList<ShellResult> GetHistory() => _operationJournal.GetCommandHistoryProjection();
 
     /// <summary>
     /// Gets sandbox statistics.
@@ -605,7 +607,8 @@ public class Sandbox : IDisposable, IObservableSandbox
         Id = Id,
         FileCount = _fileSystem.NodeCount,
         TotalSize = _fileSystem.TotalSize, // in bytes
-        CommandCount = _commandHistory.Count,
+        CommandCount = _operationJournal.CountByCategory("shell"),
+        CapabilityOperationCount = _operationJournal.CountByCategory("capability"),
         CurrentDirectory = _shell.CurrentDirectory,
         CreatedAt = CreatedAt,
         LastActivityAt = LastActivityAt
@@ -645,7 +648,7 @@ public class Sandbox : IDisposable, IObservableSandbox
             _telemetry.RecordSandboxDisposed();
             
             // End sandbox-level activity
-            _sandboxActivity?.SetTag("sandbox.command_count", _commandHistory.Count);
+            _sandboxActivity?.SetTag("sandbox.command_count", _operationJournal.CountByCategory("shell"));
             _sandboxActivity?.Dispose();
         }
 
@@ -670,13 +673,60 @@ public class Sandbox : IDisposable, IObservableSandbox
         }
 
         _capabilities.Clear();
-        _commandHistory.Clear();
+        _operationJournal.Clear();
         _observerManager.Clear();
         
         // Notify manager to remove reference
         _onDisposed?.Invoke(Id);
         
         GC.SuppressFinalize(this);
+    }
+
+    #endregion
+
+    #region Metadata Journal
+
+    private void HandleSandboxEvent(SandboxEvent sandboxEvent)
+    {
+        if (sandboxEvent is CapabilityOperationEvent capabilityEvent)
+        {
+            var metadata = new Dictionary<string, object?>(
+                capabilityEvent.Metadata ?? new Dictionary<string, object?>());
+
+            metadata["operationType"] = capabilityEvent.OperationType;
+            metadata["errorCode"] = capabilityEvent.ErrorCode;
+            metadata["errorMessage"] = capabilityEvent.ErrorMessage;
+
+            _operationJournal.Append(new SandboxOperationRecord
+            {
+                Timestamp = capabilityEvent.Timestamp,
+                Category = "capability",
+                Operation = capabilityEvent.OperationName,
+                Target = capabilityEvent.CapabilityName,
+                Success = capabilityEvent.Success ?? false,
+                Duration = capabilityEvent.Duration,
+                CorrelationId = capabilityEvent.TraceId,
+                Metadata = metadata
+            });
+        }
+    }
+
+    private void AppendShellOperation(ShellResult result)
+    {
+        _operationJournal.Append(new SandboxOperationRecord
+        {
+            Timestamp = DateTime.UtcNow,
+            Category = "shell",
+            Operation = "execute",
+            Target = _shell.CurrentDirectory,
+            Success = result.Success,
+            Duration = result.Duration,
+            Metadata = new Dictionary<string, object?>
+            {
+                ["command"] = result.Command
+            },
+            ShellResult = result
+        });
     }
 
     #endregion

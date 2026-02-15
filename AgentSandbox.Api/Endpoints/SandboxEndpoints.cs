@@ -340,6 +340,7 @@ public static class SandboxEndpoints
             stats.FileCount,
             stats.TotalSize,
             stats.CommandCount,
+            stats.CapabilityOperationCount,
             stats.CurrentDirectory,
             stats.CreatedAt,
             stats.LastActivityAt
