@@ -366,12 +366,12 @@ public class SqlCapabilityTests
             {
                 var capability = sandbox.GetCapability<ISqlCapability>();
                 
-                // Try to execute a write query - should fail because query_only is enforced
+                // Multi-statement queries should be blocked by validation layer
                 var ex = Assert.Throws<SqlCapabilityException>(() => 
                     capability.ExecuteSql("SELECT 1; DELETE FROM users WHERE id=1"));
+                Assert.Equal(SqlCapabilityErrorCodes.AuthDenied, ex.ErrorCode);
                 
-                // Even if we bypass the multi-statement check, query_only should protect us
-                // Let's verify query_only is actually enabled
+                // Verify query_only is actually enabled on the connection
                 var result = capability.ExecuteSql("PRAGMA query_only");
                 Assert.Single(result.Rows);
                 Assert.Equal(1L, result.Rows[0]["query_only"]);
@@ -428,11 +428,11 @@ public class SqlCapabilityTests
     public void ExecuteSql_PragmaQueryOnly_PreventsWriteOperations()
     {
         // This test verifies that PRAGMA query_only=ON actually prevents writes
-        // even if they somehow bypass application-level validation
+        // at the SQLite engine level, independent of application-level validation
         var dbPath = CreateDatabaseWithSampleRows();
         try
         {
-            // Create a connection with query_only enabled
+            // Disable pooling to ensure fresh connection state for this test
             using var conn = new SqliteConnection($"Data Source={dbPath};Pooling=False");
             conn.Open();
             
