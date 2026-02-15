@@ -123,6 +123,99 @@ public class SandboxManagerTests
     }
 
     [Fact]
+    public void SaveSnapshot_And_RestoreSnapshot_CreatesNewSandboxId()
+    {
+        var store = new InMemorySnapshotStore();
+        var manager = new SandboxManager(
+            defaultOptions: null,
+            managerOptions: new SandboxManagerOptions { SnapshotStore = store });
+        var sandbox = manager.Get();
+        sandbox.Execute("echo 'original' > /state.txt");
+
+        var snapshotId = manager.SaveSnapshot(sandbox.Id);
+        var restored = manager.RestoreSnapshot(snapshotId);
+        var restoredResult = restored.Execute("cat /state.txt");
+
+        Assert.NotEqual(sandbox.Id, restored.Id);
+        Assert.Equal("original", restoredResult.Stdout.Trim());
+    }
+
+    [Fact]
+    public void SaveSnapshot_WithoutStoreConfigured_Throws()
+    {
+        var manager = new SandboxManager();
+        var sandbox = manager.Get();
+
+        var ex = Assert.Throws<InvalidOperationException>(() => manager.SaveSnapshot(sandbox.Id));
+        Assert.Contains("Snapshot store is not configured", ex.Message);
+    }
+
+    [Fact]
+    public void SaveSnapshot_MultipleFromSameSandbox_ReturnsDistinctSnapshotIds()
+    {
+        var store = new InMemorySnapshotStore();
+        var manager = new SandboxManager(
+            defaultOptions: null,
+            managerOptions: new SandboxManagerOptions { SnapshotStore = store });
+        var sandbox = manager.Get();
+
+        sandbox.Execute("echo 'v1' > /state.txt");
+        var snapshotIdV1 = manager.SaveSnapshot(sandbox.Id);
+        sandbox.Execute("echo 'v2' > /state.txt");
+        var snapshotIdV2 = manager.SaveSnapshot(sandbox.Id);
+
+        var restoredV1 = manager.RestoreSnapshot(snapshotIdV1);
+        var restoredV2 = manager.RestoreSnapshot(snapshotIdV2);
+
+        Assert.NotEqual(snapshotIdV1, snapshotIdV2);
+        Assert.Equal("v1", restoredV1.Execute("cat /state.txt").Stdout.Trim());
+        Assert.Equal("v2", restoredV2.Execute("cat /state.txt").Stdout.Trim());
+    }
+
+    [Fact]
+    public void RestoreSnapshot_WithoutStoreConfigured_Throws()
+    {
+        var manager = new SandboxManager();
+
+        var ex = Assert.Throws<InvalidOperationException>(() => manager.RestoreSnapshot("snapshot-id"));
+        Assert.Contains("Snapshot store is not configured", ex.Message);
+    }
+
+    [Fact]
+    public void Release_PersistsSnapshot_And_DisposesSandbox()
+    {
+        var store = new InMemorySnapshotStore();
+        var manager = new SandboxManager(
+            defaultOptions: null,
+            managerOptions: new SandboxManagerOptions
+            {
+                SnapshotStore = store,
+                MaxActiveSandboxes = 2
+            });
+        var sandbox = manager.Get();
+        sandbox.Execute("echo 'release-state' > /state.txt");
+
+        var snapshotId = manager.Release(sandbox.Id);
+
+        Assert.Throws<ObjectDisposedException>(() => sandbox.Execute("pwd"));
+        var restored = manager.RestoreSnapshot(snapshotId);
+        var restoredResult = restored.Execute("cat /state.txt");
+
+        Assert.NotEmpty(snapshotId);
+        Assert.Equal("release-state", restoredResult.Stdout.Trim());
+    }
+
+    [Fact]
+    public void Release_WithoutStoreConfigured_Throws()
+    {
+        var manager = new SandboxManager();
+        var sandbox = manager.Get();
+
+        var ex = Assert.Throws<InvalidOperationException>(() => manager.Release(sandbox.Id));
+        Assert.Contains("Snapshot store is not configured", ex.Message);
+    }
+
+    [Fact]
     public void Execute_UsesDefaultCommandTimeout_FromDefaultOptions()
     {
         var options = new SandboxOptions
