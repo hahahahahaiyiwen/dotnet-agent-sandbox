@@ -383,6 +383,77 @@ public class SqlCapabilityTests
         }
     }
 
+    [Fact]
+    public void ExecuteSql_AllowsDatabaseQualifiedReadOnlyPragma()
+    {
+        var dbPath = CreateDatabaseWithSampleRows();
+        try
+        {
+            using (var sandbox = CreateSandbox(dbPath, out _))
+            {
+                var capability = sandbox.GetCapability<ISqlCapability>();
+                // Database-qualified PRAGMA should work for read-only PRAGMAs with arguments
+                var result = capability.ExecuteSql("PRAGMA main.table_info(users)");
+                Assert.NotEmpty(result.Rows);
+            }
+        }
+        finally
+        {
+            File.Delete(dbPath);
+        }
+    }
+
+    [Fact]
+    public void ExecuteSql_BlocksOtherPragmaWithArguments_NotInAllowlist()
+    {
+        var dbPath = CreateDatabaseWithSampleRows();
+        try
+        {
+            using (var sandbox = CreateSandbox(dbPath, out _))
+            {
+                var capability = sandbox.GetCapability<ISqlCapability>();
+                // PRAGMA case_sensitive_like(true) is mutable and should be blocked
+                var ex = Assert.Throws<SqlCapabilityException>(() => 
+                    capability.ExecuteSql("PRAGMA case_sensitive_like(true)"));
+                Assert.Equal(SqlCapabilityErrorCodes.AuthDenied, ex.ErrorCode);
+            }
+        }
+        finally
+        {
+            File.Delete(dbPath);
+        }
+    }
+
+    [Fact]
+    public void ExecuteSql_PragmaQueryOnly_PreventsWriteOperations()
+    {
+        // This test verifies that PRAGMA query_only=ON actually prevents writes
+        // even if they somehow bypass application-level validation
+        var dbPath = CreateDatabaseWithSampleRows();
+        try
+        {
+            // Create a connection with query_only enabled
+            using var conn = new SqliteConnection($"Data Source={dbPath};Pooling=False");
+            conn.Open();
+            
+            using (var cmd = conn.CreateCommand())
+            {
+                cmd.CommandText = "PRAGMA query_only=ON";
+                cmd.ExecuteNonQuery();
+            }
+
+            // Attempt to delete - should fail at SQLite engine level
+            using var deleteCmd = conn.CreateCommand();
+            deleteCmd.CommandText = "DELETE FROM users WHERE id=1";
+            var ex = Assert.Throws<SqliteException>(() => deleteCmd.ExecuteNonQuery());
+            Assert.Contains("readonly", ex.Message, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            File.Delete(dbPath);
+        }
+    }
+
     private static Sandbox CreateSandbox(string dbPath, out SqlSandboxCapability capability, DelegateSandboxObserver? observer = null)
     {
         capability = new SqlSandboxCapability(new SqlCapabilityOptions
