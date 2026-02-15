@@ -8,6 +8,7 @@ namespace AgentSandbox.Core.Capabilities;
 /// </summary>
 public interface ISandboxContext
 {
+    string SandboxId { get; }
     SandboxOptions Options { get; }
     IFileSystem FileSystem { get; }
     ISandboxShellHost Shell { get; }

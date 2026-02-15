@@ -3,7 +3,6 @@ using AgentSandbox.Core.Capabilities;
 using AgentSandbox.Core.Telemetry;
 using AgentSandbox.Capabilities.SQL;
 using Microsoft.Data.Sqlite;
-using System.Reflection;
 
 namespace AgentSandbox.Tests;
 
@@ -75,6 +74,45 @@ public class SqlCapabilityTests
     }
 
     [Fact]
+    public void ExecuteSql_BlocksMultipleStatements_WithAuthDenied()
+    {
+        var dbPath = CreateDatabaseWithSampleRows();
+        try
+        {
+            using (var sandbox = CreateSandbox(dbPath, out _))
+            {
+                var capability = sandbox.GetCapability<ISqlCapability>();
+                var ex = Assert.Throws<SqlCapabilityException>(() => capability.ExecuteSql("SELECT 1; SELECT 2"));
+                Assert.Equal(SqlCapabilityErrorCodes.AuthDenied, ex.ErrorCode);
+            }
+        }
+        finally
+        {
+            File.Delete(dbPath);
+        }
+    }
+
+    [Fact]
+    public void ExecuteSql_AllowsQuotedKeywords_InReadOnlyQuery()
+    {
+        var dbPath = CreateDatabaseWithSampleRows();
+        try
+        {
+            using (var sandbox = CreateSandbox(dbPath, out _))
+            {
+                var capability = sandbox.GetCapability<ISqlCapability>();
+                var result = capability.ExecuteSql("SELECT 'DELETE' AS text_value");
+                Assert.Single(result.Rows);
+                Assert.Equal("DELETE", result.Rows[0]["text_value"]);
+            }
+        }
+        finally
+        {
+            File.Delete(dbPath);
+        }
+    }
+
+    [Fact]
     public void ExecuteSql_EnforcesResponseByteLimit()
     {
         var dbPath = CreateDatabaseWithSampleRows();
@@ -113,23 +151,23 @@ public class SqlCapabilityTests
         try
         {
             var events = new List<CapabilityOperationEvent>();
-            var capability = new SqlSandboxCapability(new SqlCapabilityOptions
-            {
-                ConnectionString = $"Data Source={dbPath};Pooling=False",
-                MaxRowsPerPage = 10,
-                MaxResponseBytes = 4096,
-                MaxConcurrentQueries = 1
-            });
+            using var sandbox = CreateSandbox(
+                dbPath,
+                out _,
+                new DelegateSandboxObserver(onEvent: e =>
+                {
+                    if (e is CapabilityOperationEvent capabilityEvent)
+                    {
+                        events.Add(capabilityEvent);
+                    }
+                }));
 
-            var emitter = new CaptureEmitter(events);
-            var eventEmitterField = typeof(SqlSandboxCapability).GetField("_eventEmitter", BindingFlags.NonPublic | BindingFlags.Instance);
-            Assert.NotNull(eventEmitterField);
-            eventEmitterField!.SetValue(capability, emitter);
-
+            var capability = sandbox.GetCapability<ISqlCapability>();
             _ = capability.ExecuteSql("SELECT id FROM users", new SqlQueryOptions { Principal = "agent-1", Resource = "users" });
             Assert.Throws<SqlCapabilityException>(() => capability.ExecuteSql("DELETE FROM users"));
 
             var success = Assert.Single(events.Where(e => e.Success == true));
+            Assert.Equal(sandbox.Id, success.SandboxId);
             Assert.Equal("agent-1", success.Metadata!["principal"]);
             Assert.Equal("users", success.Metadata["resource"]);
             Assert.Equal("success", success.Metadata["outcome"]);
@@ -138,6 +176,49 @@ public class SqlCapabilityTests
             var failure = Assert.Single(events.Where(e => e.Success == false));
             Assert.Equal(SqlCapabilityErrorCodes.AuthDenied, failure.ErrorCode);
             Assert.Equal("failure", failure.Metadata!["outcome"]);
+            Assert.Equal(sandbox.Id, failure.SandboxId);
+        }
+        finally
+        {
+            File.Delete(dbPath);
+        }
+    }
+
+    [Fact]
+    public void ExecuteSql_MapsUnexpectedException_ToBackendUnavailable()
+    {
+        var capability = new SqlSandboxCapability(new SqlCapabilityOptions
+        {
+            ConnectionFactory = () => null!,
+            MaxRowsPerPage = 10,
+            MaxResponseBytes = 4096,
+            MaxConcurrentQueries = 1
+        });
+
+        using var sandbox = new Sandbox(options: new SandboxOptions { Capabilities = [capability] });
+        var sql = sandbox.GetCapability<ISqlCapability>();
+        var ex = Assert.Throws<SqlCapabilityException>(() => sql.ExecuteSql("SELECT 1"));
+        Assert.Equal(SqlCapabilityErrorCodes.BackendUnavailable, ex.ErrorCode);
+    }
+
+    [Fact]
+    public void ExecuteSql_RejectsOffsetBeyondConfiguredLimit()
+    {
+        var dbPath = CreateDatabaseWithSampleRows();
+        try
+        {
+            var capability = new SqlSandboxCapability(new SqlCapabilityOptions
+            {
+                ConnectionString = $"Data Source={dbPath};Pooling=False",
+                MaxRowsPerPage = 10,
+                MaxOffset = 10,
+                MaxResponseBytes = 4096,
+                MaxConcurrentQueries = 1
+            });
+            using var sandbox = new Sandbox(options: new SandboxOptions { Capabilities = [capability] });
+            var sql = sandbox.GetCapability<ISqlCapability>();
+            var ex = Assert.Throws<SqlCapabilityException>(() => sql.ExecuteSql("SELECT id FROM users", new SqlQueryOptions { Offset = 11 }));
+            Assert.Equal(SqlCapabilityErrorCodes.ResourceLimit, ex.ErrorCode);
         }
         finally
         {
@@ -215,17 +296,6 @@ public class SqlCapabilityTests
         insert.ExecuteNonQuery();
 
         return path;
-    }
-
-    private sealed class CaptureEmitter(List<CapabilityOperationEvent> events) : ISandboxEventEmitter
-    {
-        public void Emit(SandboxEvent sandboxEvent)
-        {
-            if (sandboxEvent is CapabilityOperationEvent capabilityEvent)
-            {
-                events.Add(capabilityEvent);
-            }
-        }
     }
 }
 

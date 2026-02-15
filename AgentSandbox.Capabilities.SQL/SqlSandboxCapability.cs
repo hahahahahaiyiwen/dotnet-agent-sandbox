@@ -11,11 +11,20 @@ namespace AgentSandbox.Capabilities.SQL;
 public sealed class SqlSandboxCapability : ISandboxCapability, ISqlCapability, IDisposable
 {
     private static readonly Regex FirstTokenRegex = new(@"^\s*(?<token>[A-Za-z_]+)", RegexOptions.Compiled);
-    private static readonly Regex ForbiddenTokenRegex = new(@"\b(INSERT|UPDATE|DELETE|UPSERT|MERGE|CREATE|DROP|ALTER|REPLACE|VACUUM|ATTACH|DETACH|BEGIN|COMMIT|ROLLBACK|SAVEPOINT|REINDEX|ANALYZE)\b", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+    private static readonly HashSet<string> ReadOnlyPragmasWithArguments =
+    [
+        "table_info",
+        "table_xinfo",
+        "index_info",
+        "index_xinfo",
+        "index_list",
+        "foreign_key_list"
+    ];
 
     private readonly SqlCapabilityOptions _options;
     private readonly SemaphoreSlim _concurrencyGate;
     private ISandboxEventEmitter? _eventEmitter;
+    private string _sandboxId = "unknown";
 
     public string Name => "database-sqlite";
 
@@ -30,7 +39,7 @@ public sealed class SqlSandboxCapability : ISandboxCapability, ISqlCapability, I
         {
             throw new ArgumentOutOfRangeException(nameof(options), "Timeout must be positive.");
         }
-        if (options.MaxRowsPerPage <= 0 || options.MaxResponseBytes <= 0 || options.MaxConcurrentQueries <= 0)
+        if (options.MaxRowsPerPage <= 0 || options.MaxOffset <= 0 || options.MaxResponseBytes <= 0 || options.MaxConcurrentQueries <= 0)
         {
             throw new ArgumentOutOfRangeException(nameof(options), "Guardrail limits must be positive.");
         }
@@ -42,6 +51,7 @@ public sealed class SqlSandboxCapability : ISandboxCapability, ISqlCapability, I
     public void Initialize(ISandboxContext context)
     {
         ArgumentNullException.ThrowIfNull(context);
+        _sandboxId = context.SandboxId;
         _eventEmitter = context.EventEmitter;
     }
 
@@ -82,11 +92,11 @@ public sealed class SqlSandboxCapability : ISandboxCapability, ISqlCapability, I
                     stopwatch.Elapsed);
             }
 
-            if (options.Offset < 0)
+            if (options.Offset < 0 || options.Offset > _options.MaxOffset)
             {
                 throw CreateFailure(
                     SqlCapabilityErrorCodes.ResourceLimit,
-                    "Offset cannot be negative.",
+                    $"Offset must be between 0 and {_options.MaxOffset}.",
                     options,
                     statement,
                     stopwatch.Elapsed);
@@ -94,6 +104,11 @@ public sealed class SqlSandboxCapability : ISandboxCapability, ISqlCapability, I
 
             using var connection = CreateConnection();
             connection.Open();
+            using (var readOnlyCommand = connection.CreateCommand())
+            {
+                readOnlyCommand.CommandText = "PRAGMA query_only=ON;";
+                readOnlyCommand.ExecuteNonQuery();
+            }
 
             using var command = connection.CreateCommand();
             command.CommandText = statement;
@@ -157,6 +172,10 @@ public sealed class SqlSandboxCapability : ISandboxCapability, ISqlCapability, I
         {
             throw CreateFailure(SqlCapabilityErrorCodes.BackendUnavailable, ex.Message, options, statement, stopwatch.Elapsed, ex);
         }
+        catch (Exception ex) when (ex is not SqlCapabilityException)
+        {
+            throw CreateFailure(SqlCapabilityErrorCodes.BackendUnavailable, ex.Message, options, statement, stopwatch.Elapsed, ex);
+        }
         finally
         {
             _concurrencyGate.Release();
@@ -172,8 +191,8 @@ public sealed class SqlSandboxCapability : ISandboxCapability, ISqlCapability, I
         => ex.SqliteErrorCode == 1 && ex.Message.Contains("syntax", StringComparison.OrdinalIgnoreCase);
 
     private static bool IsTimeout(SqliteException ex)
-        => ex.Message.Contains("interrupted", StringComparison.OrdinalIgnoreCase) ||
-           ex.Message.Contains("busy", StringComparison.OrdinalIgnoreCase);
+        => ex.SqliteErrorCode == 9 ||
+           ex.Message.Contains("interrupted", StringComparison.OrdinalIgnoreCase);
 
     private void EnsureReadOnlyStatement(string statement)
     {
@@ -183,11 +202,11 @@ public sealed class SqlSandboxCapability : ISandboxCapability, ISqlCapability, I
         }
 
         var normalized = statement.Trim();
-        if (normalized.EndsWith(';'))
+        while (normalized.EndsWith(';'))
         {
             normalized = normalized[..^1].TrimEnd();
         }
-        if (normalized.Contains(';'))
+        if (ContainsUnquotedSemicolon(normalized))
         {
             throw new SqlCapabilityException(SqlCapabilityErrorCodes.AuthDenied, "Multiple SQL statements are not allowed.");
         }
@@ -198,15 +217,11 @@ public sealed class SqlSandboxCapability : ISandboxCapability, ISqlCapability, I
             throw new SqlCapabilityException(SqlCapabilityErrorCodes.AuthDenied, $"Statement '{token}' is not allowed in read-only mode.");
         }
 
-        if (ForbiddenTokenRegex.IsMatch(normalized))
+        if (token == "PRAGMA")
         {
-            throw new SqlCapabilityException(SqlCapabilityErrorCodes.AuthDenied, "Write/DDL SQL statements are not allowed.");
+            EnsurePragmaIsReadOnly(normalized);
         }
 
-        if (token == "PRAGMA" && normalized.Contains('='))
-        {
-            throw new SqlCapabilityException(SqlCapabilityErrorCodes.AuthDenied, "Mutable PRAGMA statements are not allowed.");
-        }
     }
 
     private SqlCapabilityException CreateFailure(
@@ -223,8 +238,8 @@ public sealed class SqlSandboxCapability : ISandboxCapability, ISqlCapability, I
 
     private void EmitSuccess(SqlQueryOptions options, string statement, int returnedRows, int responseBytes, TimeSpan duration)
     {
-        _eventEmitter?.Emit(SandboxCapabilityEventHelper.CreateSuccessEvent(
-            sandboxId: "database-capability",
+            _eventEmitter?.Emit(SandboxCapabilityEventHelper.CreateSuccessEvent(
+            sandboxId: _sandboxId,
             capabilityName: Name,
             operationType: "capability.database.query",
             operationName: "ExecuteSql",
@@ -235,7 +250,7 @@ public sealed class SqlSandboxCapability : ISandboxCapability, ISqlCapability, I
     private void EmitFailure(SqlQueryOptions options, string statement, string errorCode, string message, TimeSpan duration)
     {
         _eventEmitter?.Emit(SandboxCapabilityEventHelper.CreateFailureEvent(
-            sandboxId: "database-capability",
+            sandboxId: _sandboxId,
             capabilityName: Name,
             operationType: "capability.database.query",
             operationName: "ExecuteSql",
@@ -270,10 +285,123 @@ public sealed class SqlSandboxCapability : ISandboxCapability, ISqlCapability, I
         foreach (var item in row)
         {
             bytes += Encoding.UTF8.GetByteCount(item.Key);
-            bytes += Encoding.UTF8.GetByteCount(item.Value?.ToString() ?? "null");
+            bytes += item.Value switch
+            {
+                null => Encoding.UTF8.GetByteCount("null"),
+                byte[] data => data.Length,
+                string text => Encoding.UTF8.GetByteCount(text),
+                _ => Encoding.UTF8.GetByteCount(item.Value.ToString() ?? string.Empty)
+            };
         }
 
         return bytes;
+    }
+
+    private static bool ContainsUnquotedSemicolon(string sql)
+    {
+        var inSingleQuote = false;
+        var inDoubleQuote = false;
+        var inLineComment = false;
+        var inBlockComment = false;
+
+        for (var i = 0; i < sql.Length; i++)
+        {
+            var c = sql[i];
+            var next = i + 1 < sql.Length ? sql[i + 1] : '\0';
+
+            if (inLineComment)
+            {
+                if (c == '\n')
+                {
+                    inLineComment = false;
+                }
+                continue;
+            }
+
+            if (inBlockComment)
+            {
+                if (c == '*' && next == '/')
+                {
+                    inBlockComment = false;
+                    i++;
+                }
+                continue;
+            }
+
+            if (!inSingleQuote && !inDoubleQuote)
+            {
+                if (c == '-' && next == '-')
+                {
+                    inLineComment = true;
+                    i++;
+                    continue;
+                }
+
+                if (c == '/' && next == '*')
+                {
+                    inBlockComment = true;
+                    i++;
+                    continue;
+                }
+            }
+
+            if (!inDoubleQuote && c == '\'')
+            {
+                inSingleQuote = !inSingleQuote;
+                continue;
+            }
+
+            if (!inSingleQuote && c == '"')
+            {
+                inDoubleQuote = !inDoubleQuote;
+                continue;
+            }
+
+            if (!inSingleQuote && !inDoubleQuote && c == ';')
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static void EnsurePragmaIsReadOnly(string statement)
+    {
+        var pragmaText = statement["PRAGMA".Length..].Trim();
+        if (string.IsNullOrWhiteSpace(pragmaText))
+        {
+            throw new SqlCapabilityException(SqlCapabilityErrorCodes.AuthDenied, "PRAGMA statement is incomplete.");
+        }
+
+        if (pragmaText.Contains('='))
+        {
+            throw new SqlCapabilityException(SqlCapabilityErrorCodes.AuthDenied, "Mutable PRAGMA statements are not allowed.");
+        }
+
+        var nameEnd = pragmaText.IndexOfAny([' ', '\t', '\r', '\n', '(']);
+        var pragmaName = (nameEnd >= 0 ? pragmaText[..nameEnd] : pragmaText).Trim();
+        var trailing = nameEnd >= 0 ? pragmaText[nameEnd..].TrimStart() : string.Empty;
+        var baseName = pragmaName.Contains('.') ? pragmaName[(pragmaName.LastIndexOf('.') + 1)..] : pragmaName;
+        if (string.IsNullOrWhiteSpace(baseName))
+        {
+            throw new SqlCapabilityException(SqlCapabilityErrorCodes.AuthDenied, "PRAGMA statement is incomplete.");
+        }
+
+        if (string.IsNullOrEmpty(trailing))
+        {
+            return;
+        }
+
+        if (!trailing.StartsWith('('))
+        {
+            throw new SqlCapabilityException(SqlCapabilityErrorCodes.AuthDenied, "Mutable PRAGMA statements are not allowed.");
+        }
+
+        if (!ReadOnlyPragmasWithArguments.Contains(baseName.ToLowerInvariant()))
+        {
+            throw new SqlCapabilityException(SqlCapabilityErrorCodes.AuthDenied, "Mutable PRAGMA statements are not allowed.");
+        }
     }
 
     private SqliteConnection CreateConnection()
