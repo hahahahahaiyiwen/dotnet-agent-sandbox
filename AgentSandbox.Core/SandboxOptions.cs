@@ -66,7 +66,7 @@ public class SandboxOptions
     /// <summary>Shell command extensions to register.</summary>
     public IEnumerable<IShellCommand> ShellExtensions { get; set; } = Array.Empty<IShellCommand>();
 
-    /// <summary>Sandbox capabilities to apply before initialization.</summary>
+    /// <summary>Sandbox capabilities to initialize during sandbox construction (after ShellExtensions registration, before file imports).</summary>
     public IReadOnlyList<ISandboxCapability> Capabilities { get; set; } = [];
 
     /// <summary>
@@ -102,6 +102,7 @@ public class SandboxOptions
 
     /// <summary>
     /// Creates a shallow copy of this options instance.
+    /// Capability instances are reused across clones; they should be stateless or re-initialization safe.
     /// </summary>
     public SandboxOptions Clone() => new()
     {

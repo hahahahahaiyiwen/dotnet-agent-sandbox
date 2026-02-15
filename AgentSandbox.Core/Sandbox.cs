@@ -649,6 +649,27 @@ public class Sandbox : IDisposable, IObservableSandbox
             _sandboxActivity?.Dispose();
         }
 
+        var disposedCapabilities = new HashSet<object>(ReferenceEqualityComparer.Instance);
+        foreach (var capability in _capabilities.Values)
+        {
+            if (!disposedCapabilities.Add(capability))
+            {
+                continue;
+            }
+
+            if (capability is IDisposable disposable)
+            {
+                disposable.Dispose();
+                continue;
+            }
+
+            if (capability is IAsyncDisposable asyncDisposable)
+            {
+                asyncDisposable.DisposeAsync().AsTask().GetAwaiter().GetResult();
+            }
+        }
+
+        _capabilities.Clear();
         _commandHistory.Clear();
         _observerManager.Clear();
         
