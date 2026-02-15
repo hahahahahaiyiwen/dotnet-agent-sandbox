@@ -256,6 +256,133 @@ public class SqlCapabilityTests
         Assert.Equal("Ada", result.Rows[0]["name"]);
     }
 
+    [Fact]
+    public void ExecuteSql_AllowsReadOnlyPragma_WithoutArguments()
+    {
+        var dbPath = CreateDatabaseWithSampleRows();
+        try
+        {
+            using (var sandbox = CreateSandbox(dbPath, out _))
+            {
+                var capability = sandbox.GetCapability<ISqlCapability>();
+                var result = capability.ExecuteSql("PRAGMA query_only");
+                Assert.Single(result.Rows);
+                Assert.Equal(1L, result.Rows[0]["query_only"]);
+            }
+        }
+        finally
+        {
+            File.Delete(dbPath);
+        }
+    }
+
+    [Fact]
+    public void ExecuteSql_AllowsReadOnlyPragma_WithParenthesizedArgument()
+    {
+        var dbPath = CreateDatabaseWithSampleRows();
+        try
+        {
+            using (var sandbox = CreateSandbox(dbPath, out _))
+            {
+                var capability = sandbox.GetCapability<ISqlCapability>();
+                var result = capability.ExecuteSql("PRAGMA table_info(users)");
+                Assert.NotEmpty(result.Rows);
+                Assert.Contains(result.Rows, row => row["name"]?.ToString() == "id");
+            }
+        }
+        finally
+        {
+            File.Delete(dbPath);
+        }
+    }
+
+    [Fact]
+    public void ExecuteSql_BlocksMutablePragma_WithEqualsSign()
+    {
+        var dbPath = CreateDatabaseWithSampleRows();
+        try
+        {
+            using (var sandbox = CreateSandbox(dbPath, out _))
+            {
+                var capability = sandbox.GetCapability<ISqlCapability>();
+                var ex = Assert.Throws<SqlCapabilityException>(() => capability.ExecuteSql("PRAGMA journal_mode=WAL"));
+                Assert.Equal(SqlCapabilityErrorCodes.AuthDenied, ex.ErrorCode);
+                Assert.Contains("Mutable PRAGMA", ex.Message);
+            }
+        }
+        finally
+        {
+            File.Delete(dbPath);
+        }
+    }
+
+    [Fact]
+    public void ExecuteSql_BlocksMutablePragma_WithSpaceSeparatedValue()
+    {
+        var dbPath = CreateDatabaseWithSampleRows();
+        try
+        {
+            using (var sandbox = CreateSandbox(dbPath, out _))
+            {
+                var capability = sandbox.GetCapability<ISqlCapability>();
+                var ex = Assert.Throws<SqlCapabilityException>(() => capability.ExecuteSql("PRAGMA journal_mode WAL"));
+                Assert.Equal(SqlCapabilityErrorCodes.AuthDenied, ex.ErrorCode);
+                Assert.Contains("Mutable PRAGMA", ex.Message);
+            }
+        }
+        finally
+        {
+            File.Delete(dbPath);
+        }
+    }
+
+    [Fact]
+    public void ExecuteSql_BlocksMutablePragma_WithParenthesizedValue()
+    {
+        var dbPath = CreateDatabaseWithSampleRows();
+        try
+        {
+            using (var sandbox = CreateSandbox(dbPath, out _))
+            {
+                var capability = sandbox.GetCapability<ISqlCapability>();
+                var ex = Assert.Throws<SqlCapabilityException>(() => capability.ExecuteSql("PRAGMA journal_mode(WAL)"));
+                Assert.Equal(SqlCapabilityErrorCodes.AuthDenied, ex.ErrorCode);
+                Assert.Contains("Mutable PRAGMA", ex.Message);
+            }
+        }
+        finally
+        {
+            File.Delete(dbPath);
+        }
+    }
+
+    [Fact]
+    public void ExecuteSql_EnforcesPragmaQueryOnly_OnConnection()
+    {
+        var dbPath = CreateDatabaseWithSampleRows();
+        try
+        {
+            using (var sandbox = CreateSandbox(dbPath, out _))
+            {
+                var capability = sandbox.GetCapability<ISqlCapability>();
+                
+                // Try to execute a write query - should fail because query_only is enforced
+                var ex = Assert.Throws<SqlCapabilityException>(() => 
+                    capability.ExecuteSql("SELECT 1; DELETE FROM users WHERE id=1"));
+                
+                // Even if we bypass the multi-statement check, query_only should protect us
+                // Let's verify query_only is actually enabled
+                var result = capability.ExecuteSql("PRAGMA query_only");
+                Assert.Single(result.Rows);
+                Assert.Equal(1L, result.Rows[0]["query_only"]);
+            }
+        }
+        finally
+        {
+            File.Delete(dbPath);
+        }
+    }
+
     private static Sandbox CreateSandbox(string dbPath, out SqlSandboxCapability capability, DelegateSandboxObserver? observer = null)
     {
         capability = new SqlSandboxCapability(new SqlCapabilityOptions
