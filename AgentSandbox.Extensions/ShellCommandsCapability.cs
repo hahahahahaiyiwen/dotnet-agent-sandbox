@@ -1,4 +1,5 @@
 using AgentSandbox.Core;
+using AgentSandbox.Core.Capabilities;
 using AgentSandbox.Core.Shell;
 
 namespace AgentSandbox.Extensions;

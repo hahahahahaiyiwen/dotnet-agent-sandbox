@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Diagnostics.Metrics;
+using AgentSandbox.Core.Capabilities;
 using AgentSandbox.Core.Shell;
 
 namespace AgentSandbox.Core.Telemetry;
@@ -13,14 +14,14 @@ internal sealed class SandboxTelemetryFacade
 {
     private readonly SandboxOptions _options;
     private readonly string _sandboxId;
-    private readonly Action<Action<ISandboxObserver>> _notifyObservers;
+    private readonly ISandboxEventEmitter _eventEmitter;
 
     public SandboxTelemetryFacade(SandboxOptions options, string sandboxId,
-        Action<Action<ISandboxObserver>> notifyObservers)
+        ISandboxEventEmitter eventEmitter)
     {
         _options = options;
         _sandboxId = sandboxId;
-        _notifyObservers = notifyObservers;
+        _eventEmitter = eventEmitter;
     }
 
     private bool TelemetryEnabled => _options.Telemetry?.Enabled == true;
@@ -36,10 +37,10 @@ internal sealed class SandboxTelemetryFacade
             return;
 
         var instanceId = _options.Telemetry!.InstanceId;
-        SandboxTelemetry.SandboxesCreated.Add(1,
+        SandboxTelemetryHelper.SandboxesCreated.Add(1,
             new KeyValuePair<string, object?>("sandbox.id", _sandboxId),
             new KeyValuePair<string, object?>("service.instance.id", instanceId));
-        SandboxTelemetry.ActiveSandboxes.Add(1,
+        SandboxTelemetryHelper.ActiveSandboxes.Add(1,
             new KeyValuePair<string, object?>("service.instance.id", instanceId));
 
         EmitLifecycleEvent(SandboxLifecycleType.Created);
@@ -56,10 +57,10 @@ internal sealed class SandboxTelemetryFacade
         EmitLifecycleEvent(SandboxLifecycleType.Disposed);
 
         var instanceId = _options.Telemetry!.InstanceId;
-        SandboxTelemetry.SandboxesDisposed.Add(1,
+        SandboxTelemetryHelper.SandboxesDisposed.Add(1,
             new KeyValuePair<string, object?>("sandbox.id", _sandboxId),
             new KeyValuePair<string, object?>("service.instance.id", instanceId));
-        SandboxTelemetry.ActiveSandboxes.Add(-1,
+        SandboxTelemetryHelper.ActiveSandboxes.Add(-1,
             new KeyValuePair<string, object?>("service.instance.id", instanceId));
     }
 
@@ -75,7 +76,7 @@ internal sealed class SandboxTelemetryFacade
     {
         if (TelemetryEnabled && _options.Telemetry!.TraceCommands)
         {
-            return SandboxTelemetry.StartCommandActivity(command, _sandboxId);
+            return SandboxTelemetryHelper.StartCommandActivity(command, _sandboxId);
         }
         return null;
     }
@@ -88,7 +89,7 @@ internal sealed class SandboxTelemetryFacade
         if (!TelemetryEnabled)
             return;
 
-        var commandName = SandboxTelemetry.GetCommandName(command);
+        var commandName = SandboxTelemetryHelper.GetCommandName(command);
         RecordOperationSuccess("shell", commandName, null, duration);
 
         Activity.Current?.SetTag("command.exit_code", result.ExitCode);
@@ -121,7 +122,7 @@ internal sealed class SandboxTelemetryFacade
     {
         if (TelemetryEnabled && _options.Telemetry!.TraceFileSystem)
         {
-            return SandboxTelemetry.StartCommandActivity($"read_file {path}", _sandboxId);
+            return SandboxTelemetryHelper.StartCommandActivity($"read_file {path}", _sandboxId);
         }
         return null;
     }
@@ -177,7 +178,7 @@ internal sealed class SandboxTelemetryFacade
     {
         if (TelemetryEnabled && _options.Telemetry!.TraceFileSystem)
         {
-            return SandboxTelemetry.StartCommandActivity($"write_file {path}", _sandboxId);
+            return SandboxTelemetryHelper.StartCommandActivity($"write_file {path}", _sandboxId);
         }
         return null;
     }
@@ -223,7 +224,7 @@ internal sealed class SandboxTelemetryFacade
     {
         if (TelemetryEnabled && _options.Telemetry!.TraceFileSystem)
         {
-            return SandboxTelemetry.StartCommandActivity($"apply_patch {path}", _sandboxId);
+            return SandboxTelemetryHelper.StartCommandActivity($"apply_patch {path}", _sandboxId);
         }
         return null;
     }
@@ -240,7 +241,7 @@ internal sealed class SandboxTelemetryFacade
         if (!telemetryOptions.TraceCommands && !telemetryOptions.TraceFileSystem)
             return null;
 
-        var activity = SandboxTelemetry.StartCommandActivity($"{operationType}:{operationName}", _sandboxId);
+        var activity = SandboxTelemetryHelper.StartCommandActivity($"{operationType}:{operationName}", _sandboxId);
         activity?.SetTag("operation.type", operationType);
         activity?.SetTag("operation.name", operationName);
         if (!string.IsNullOrWhiteSpace(capabilityName))
@@ -299,8 +300,8 @@ internal sealed class SandboxTelemetryFacade
             return;
 
         var telemetryTags = BuildOperationTags(operationType, operationName, capabilityName, tags);
-        SandboxTelemetry.CommandsExecuted.Add(1, telemetryTags);
-        SandboxTelemetry.CommandDuration.Record(duration.TotalMilliseconds, telemetryTags);
+        SandboxTelemetryHelper.CommandsExecuted.Add(1, telemetryTags);
+        SandboxTelemetryHelper.CommandDuration.Record(duration.TotalMilliseconds, telemetryTags);
 
         Activity.Current?.SetTag("operation.type", operationType);
         Activity.Current?.SetTag("operation.name", operationName);
@@ -333,8 +334,8 @@ internal sealed class SandboxTelemetryFacade
             telemetryTags.Add("error.code", errorCode);
         }
 
-        SandboxTelemetry.CommandsExecuted.Add(1, telemetryTags);
-        SandboxTelemetry.CommandsFailed.Add(1, telemetryTags);
+        SandboxTelemetryHelper.CommandsExecuted.Add(1, telemetryTags);
+        SandboxTelemetryHelper.CommandsFailed.Add(1, telemetryTags);
 
         Activity.Current?.SetStatus(ActivityStatusCode.Error, errorMessage);
         Activity.Current?.SetTag("operation.type", operationType);
@@ -397,21 +398,15 @@ internal sealed class SandboxTelemetryFacade
     private void EmitCommandExecutedEvent(string command, ShellResult result, TimeSpan duration)
     {
         var maxOutput = _options.Telemetry?.MaxOutputLength ?? 1024;
-        var evt = new CommandExecutedEvent
-        {
-            SandboxId = _sandboxId,
-            Command = command,
-            CommandName = SandboxTelemetry.GetCommandName(command),
-            ExitCode = result.ExitCode,
-            Duration = duration,
-            Output = TruncateOutput(result.Stdout, maxOutput),
-            Error = result.Stderr,
-            WorkingDirectory = Activity.Current?.Tags.FirstOrDefault(t => t.Key == "command.cwd").Value?.ToString() ?? "/",
-            TraceId = Activity.Current?.TraceId.ToString(),
-            SpanId = Activity.Current?.SpanId.ToString()
-        };
-
-        _notifyObservers(o => o.OnCommandExecuted(evt));
+        var workingDirectory = Activity.Current?.Tags.FirstOrDefault(t => t.Key == "command.cwd").Value?.ToString() ?? "/";
+        _eventEmitter.Emit(SandboxTelemetryHelper.CreateCommandExecutedEvent(
+            _sandboxId,
+            command,
+            result,
+            duration,
+            workingDirectory,
+            maxOutput,
+            Activity.Current));
     }
 
     /// <summary>
@@ -419,16 +414,11 @@ internal sealed class SandboxTelemetryFacade
     /// </summary>
     private void EmitLifecycleEvent(SandboxLifecycleType lifecycleType, string? details = null)
     {
-        var evt = new SandboxLifecycleEvent
-        {
-            SandboxId = _sandboxId,
-            LifecycleType = lifecycleType,
-            Details = details,
-            TraceId = Activity.Current?.TraceId.ToString(),
-            SpanId = Activity.Current?.SpanId.ToString()
-        };
-
-        _notifyObservers(o => o.OnLifecycleEvent(evt));
+        _eventEmitter.Emit(SandboxTelemetryHelper.CreateLifecycleEvent(
+            _sandboxId,
+            lifecycleType,
+            details,
+            Activity.Current));
     }
 
     /// <summary>
@@ -436,29 +426,14 @@ internal sealed class SandboxTelemetryFacade
     /// </summary>
     private void EmitErrorEvent(string category, string message, Exception? ex = null)
     {
-        var evt = new SandboxErrorEvent
-        {
-            SandboxId = _sandboxId,
-            Category = category,
-            Message = message,
-            ExceptionType = ex?.GetType().Name,
-            StackTrace = ex?.StackTrace,
-            TraceId = Activity.Current?.TraceId.ToString(),
-            SpanId = Activity.Current?.SpanId.ToString()
-        };
-
-        _notifyObservers(o => o.OnError(evt));
-    }
-
-    /// <summary>
-    /// Truncates output string to max length.
-    /// </summary>
-    private static string? TruncateOutput(string? output, int maxLength)
-    {
-        if (output == null || output.Length <= maxLength)
-            return output;
-        return output[..maxLength] + "... (truncated)";
+        _eventEmitter.Emit(SandboxTelemetryHelper.CreateErrorEvent(
+            _sandboxId,
+            category,
+            message,
+            ex,
+            Activity.Current));
     }
 
     #endregion
 }
+

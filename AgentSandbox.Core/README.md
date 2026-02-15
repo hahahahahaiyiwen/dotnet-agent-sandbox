@@ -204,10 +204,6 @@ using var subscription = sandbox.Subscribe(myObserver);
 
 Telemetry hooks live in `AgentSandbox.Core.Telemetry` and are configured via `SandboxOptions.Telemetry`.
 
-## Thread Safety
-
-Sandbox instances are thread-safe for concurrent command execution.
-
 ## See Also
 
 - [AgentSandbox.Extensions](../AgentSandbox.Extensions) - Shell extensions (curl, git, jq) and Semantic Kernel integration

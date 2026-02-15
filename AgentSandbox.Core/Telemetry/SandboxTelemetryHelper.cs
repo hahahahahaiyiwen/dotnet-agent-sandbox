@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Diagnostics.Metrics;
+using AgentSandbox.Core.Shell;
 
 namespace AgentSandbox.Core.Telemetry;
 
@@ -7,7 +8,7 @@ namespace AgentSandbox.Core.Telemetry;
 /// Central telemetry instrumentation for AgentSandbox.
 /// Provides ActivitySource for tracing and Meter for metrics.
 /// </summary>
-public static class SandboxTelemetry
+public static class SandboxTelemetryHelper
 {
     /// <summary>
     /// Service name used for telemetry identification.
@@ -241,5 +242,72 @@ public static class SandboxTelemetry
         return spaceIndex > 0 ? trimmed[..spaceIndex] : trimmed;
     }
 
+    public static CommandExecutedEvent CreateCommandExecutedEvent(
+        string sandboxId,
+        string command,
+        ShellResult result,
+        TimeSpan duration,
+        string workingDirectory,
+        int maxOutputLength,
+        Activity? activity)
+    {
+        return new CommandExecutedEvent
+        {
+            SandboxId = sandboxId,
+            Command = command,
+            CommandName = GetCommandName(command),
+            ExitCode = result.ExitCode,
+            Duration = duration,
+            Output = TruncateOutput(result.Stdout, maxOutputLength),
+            Error = result.Stderr,
+            WorkingDirectory = workingDirectory,
+            TraceId = activity?.TraceId.ToString(),
+            SpanId = activity?.SpanId.ToString()
+        };
+    }
+
+    public static SandboxLifecycleEvent CreateLifecycleEvent(
+        string sandboxId,
+        SandboxLifecycleType lifecycleType,
+        string? details,
+        Activity? activity)
+    {
+        return new SandboxLifecycleEvent
+        {
+            SandboxId = sandboxId,
+            LifecycleType = lifecycleType,
+            Details = details,
+            TraceId = activity?.TraceId.ToString(),
+            SpanId = activity?.SpanId.ToString()
+        };
+    }
+
+    public static SandboxErrorEvent CreateErrorEvent(
+        string sandboxId,
+        string category,
+        string message,
+        Exception? ex,
+        Activity? activity)
+    {
+        return new SandboxErrorEvent
+        {
+            SandboxId = sandboxId,
+            Category = category,
+            Message = message,
+            ExceptionType = ex?.GetType().Name,
+            StackTrace = ex?.StackTrace,
+            TraceId = activity?.TraceId.ToString(),
+            SpanId = activity?.SpanId.ToString()
+        };
+    }
+
+    private static string? TruncateOutput(string? output, int maxLength)
+    {
+        if (output == null || output.Length <= maxLength)
+            return output;
+        return output[..maxLength] + "... (truncated)";
+    }
+
     #endregion
 }
+

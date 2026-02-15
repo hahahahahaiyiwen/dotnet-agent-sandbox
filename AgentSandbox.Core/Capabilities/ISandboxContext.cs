@@ -1,6 +1,7 @@
 using AgentSandbox.Core.FileSystem;
+using AgentSandbox.Core.Telemetry;
 
-namespace AgentSandbox.Core;
+namespace AgentSandbox.Core.Capabilities;
 
 /// <summary>
 /// Stable runtime context provided to sandbox capabilities during initialization.
@@ -10,7 +11,7 @@ public interface ISandboxContext
     SandboxOptions Options { get; }
     IFileSystem FileSystem { get; }
     ISandboxShellHost Shell { get; }
-    ISandboxTelemetry Telemetry { get; }
+    ISandboxEventEmitter EventEmitter { get; }
     IServiceProvider? Services { get; }
 
     TCapability GetCapability<TCapability>() where TCapability : class;

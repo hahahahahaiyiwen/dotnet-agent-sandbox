@@ -25,7 +25,7 @@ public static class OpenTelemetryExtensions
     /// </example>
     public static TracerProviderBuilder AddSandboxInstrumentation(this TracerProviderBuilder builder)
     {
-        return builder.AddSource(SandboxTelemetry.ServiceName);
+        return builder.AddSource(SandboxTelemetryHelper.ServiceName);
     }
 
     /// <summary>
@@ -44,6 +44,7 @@ public static class OpenTelemetryExtensions
     /// </example>
     public static MeterProviderBuilder AddSandboxInstrumentation(this MeterProviderBuilder builder)
     {
-        return builder.AddMeter(SandboxTelemetry.ServiceName);
+        return builder.AddMeter(SandboxTelemetryHelper.ServiceName);
     }
 }
+

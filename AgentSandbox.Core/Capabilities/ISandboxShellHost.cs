@@ -1,6 +1,6 @@
 using AgentSandbox.Core.Shell;
 
-namespace AgentSandbox.Core;
+namespace AgentSandbox.Core.Capabilities;
 
 /// <summary>
 /// Minimal shell host abstraction exposed to capabilities.

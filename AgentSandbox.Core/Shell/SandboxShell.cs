@@ -1,4 +1,5 @@
 using AgentSandbox.Core.FileSystem;
+using AgentSandbox.Core.Capabilities;
 using AgentSandbox.Core.Security;
 using AgentSandbox.Core.Shell.Commands;
 using System.Diagnostics;

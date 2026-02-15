@@ -1,4 +1,5 @@
 using AgentSandbox.Core.Importing;
+using AgentSandbox.Core.Capabilities;
 using AgentSandbox.Core.Security;
 using AgentSandbox.Core.Shell;
 using AgentSandbox.Core.Skills;

@@ -1,4 +1,5 @@
 using AgentSandbox.Core;
+using AgentSandbox.Core.Capabilities;
 using AgentSandbox.Core.Shell;
 using AgentSandbox.Core.Telemetry;
 using AgentSandbox.Extensions;
@@ -72,8 +73,14 @@ public class SandboxCapabilityTests
     [Fact]
     public void Capability_CanEmitTelemetryOperation_ThroughSandboxTelemetry()
     {
-        var errors = new List<SandboxErrorEvent>();
-        var observer = new DelegateSandboxObserver(onError: e => errors.Add(e));
+        var capabilityEvents = new List<CapabilityOperationEvent>();
+        var observer = new DelegateSandboxObserver(onEvent: e =>
+        {
+            if (e is CapabilityOperationEvent capabilityEvent)
+            {
+                capabilityEvents.Add(capabilityEvent);
+            }
+        });
         var options = new SandboxOptions
         {
             Telemetry = new SandboxTelemetryOptions { Enabled = true },
@@ -89,7 +96,9 @@ public class SandboxCapabilityTests
         var capability = sandbox.GetCapability<ITelemetryCapability>();
         capability.Run();
 
-        Assert.Empty(errors);
+        Assert.Single(capabilityEvents);
+        Assert.True(capabilityEvents[0].Success);
+        Assert.Equal("telemetry-capability", capabilityEvents[0].CapabilityName);
     }
 
     private sealed class HelloCommand : IShellCommand
@@ -127,22 +136,22 @@ public class SandboxCapabilityTests
 
     private sealed class TelemetryCapability : ISandboxCapability, ITelemetryCapability
     {
-        private ISandboxTelemetry? _telemetry;
+        private ISandboxEventEmitter? _eventEmitter;
         public string Name => "telemetry-capability";
 
         public void Initialize(ISandboxContext context)
         {
-            _telemetry = context.Telemetry;
+            _eventEmitter = context.EventEmitter;
         }
 
         public void Run()
         {
-            var operation = _telemetry!.StartOperation(
+            _eventEmitter!.Emit(SandboxCapabilityEventHelper.CreateSuccessEvent(
+                sandboxId: "capability-test",
+                capabilityName: Name,
                 operationType: "capability.demo",
                 operationName: "run",
-                capabilityName: Name,
-                tags: new Dictionary<string, object?> { ["demo.step"] = "sample" });
-            operation.Complete();
+                metadata: new Dictionary<string, object?> { ["demo.step"] = "sample" }));
         }
     }
 }

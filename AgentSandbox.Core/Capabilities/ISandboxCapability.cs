@@ -1,4 +1,4 @@
-namespace AgentSandbox.Core;
+namespace AgentSandbox.Core.Capabilities;
 
 /// <summary>
 /// Represents a reusable sandbox capability that can be initialized at runtime.

@@ -1,4 +1,5 @@
 using AgentSandbox.Core.FileSystem;
+using AgentSandbox.Core.Capabilities;
 using AgentSandbox.Core.Importing;
 using AgentSandbox.Core.Shell;
 using AgentSandbox.Core.Skills;
@@ -22,7 +23,7 @@ public class Sandbox : IDisposable, IObservableSandbox
     private readonly FileImportManager _fileImportManager;
     private readonly SkillManager _skillManager;
     private readonly Dictionary<Type, object> _capabilities = new();
-    private readonly ISandboxTelemetry _sandboxTelemetry;
+    private readonly ISandboxEventEmitter _eventEmitter;
     private readonly List<ShellResult> _commandHistory = new();
     private readonly Action<string>? _onDisposed;
     private readonly Activity? _sandboxActivity;
@@ -59,13 +60,13 @@ public class Sandbox : IDisposable, IObservableSandbox
         LastActivityAt = CreatedAt;
 
         // Initialize telemetry facade
-        _telemetry = new SandboxTelemetryFacade(_options, Id, _observerManager.NotifyObservers);
-        _sandboxTelemetry = new SandboxTelemetryView(_telemetry, TelemetryEnabled);
+        _eventEmitter = new SandboxEventEmitter(_observerManager.NotifyObservers);
+        _telemetry = new SandboxTelemetryFacade(_options, Id, _eventEmitter);
         
         // Start sandbox-level activity for tracing
         if (TelemetryEnabled)
         {
-            _sandboxActivity = SandboxTelemetry.StartSandboxActivity(Id);
+            _sandboxActivity = SandboxTelemetryHelper.StartSandboxActivity(Id);
             _telemetry.RecordSandboxCreated();
         }
 
@@ -160,7 +161,7 @@ public class Sandbox : IDisposable, IObservableSandbox
             RegisterCapabilityInterfaces(capability);
         }
 
-        var context = new SandboxContext(_options, _fileSystem, _shell, _sandboxTelemetry, _capabilities);
+        var context = new SandboxContext(_options, _fileSystem, _shell, _eventEmitter, _capabilities);
         foreach (var capability in _options.Capabilities)
         {
             capability.Initialize(context);
@@ -659,6 +660,8 @@ public class Sandbox : IDisposable, IObservableSandbox
 
     #endregion
 
+    #region Sandbox Context Implementation
+
     private sealed class SandboxContext : ISandboxContext
     {
         private readonly IReadOnlyDictionary<Type, object> _capabilities;
@@ -667,13 +670,13 @@ public class Sandbox : IDisposable, IObservableSandbox
             SandboxOptions options,
             FileSystem.FileSystem fileSystem,
             SandboxShell shell,
-            ISandboxTelemetry telemetry,
+            ISandboxEventEmitter eventEmitter,
             IReadOnlyDictionary<Type, object> capabilities)
         {
             Options = options;
             FileSystem = fileSystem;
             Shell = shell;
-            Telemetry = telemetry;
+            EventEmitter = eventEmitter;
             Services = options.Services;
             _capabilities = capabilities;
         }
@@ -681,7 +684,7 @@ public class Sandbox : IDisposable, IObservableSandbox
         public SandboxOptions Options { get; }
         public IFileSystem FileSystem { get; }
         public ISandboxShellHost Shell { get; }
-        public ISandboxTelemetry Telemetry { get; }
+        public ISandboxEventEmitter EventEmitter { get; }
         public IServiceProvider? Services { get; }
 
         public TCapability GetCapability<TCapability>() where TCapability : class
@@ -707,141 +710,5 @@ public class Sandbox : IDisposable, IObservableSandbox
         }
     }
 
-    private sealed class SandboxTelemetryView : ISandboxTelemetry
-    {
-        private readonly SandboxTelemetryFacade _telemetry;
-        public bool Enabled { get; }
-
-        public SandboxTelemetryView(SandboxTelemetryFacade telemetry, bool enabled)
-        {
-            _telemetry = telemetry;
-            Enabled = enabled;
-        }
-
-        public ISandboxTelemetryOperation StartOperation(
-            string operationType,
-            string operationName,
-            string? capabilityName = null,
-            IReadOnlyDictionary<string, object?>? tags = null)
-        {
-            ArgumentException.ThrowIfNullOrWhiteSpace(operationType);
-            ArgumentException.ThrowIfNullOrWhiteSpace(operationName);
-
-            if (!Enabled)
-            {
-                return NoOpTelemetryOperation.Instance;
-            }
-
-            return new SandboxTelemetryOperation(
-                _telemetry,
-                operationType,
-                operationName,
-                capabilityName,
-                tags);
-        }
-    }
-
-    private sealed class SandboxTelemetryOperation : ISandboxTelemetryOperation
-    {
-        private readonly SandboxTelemetryFacade _telemetry;
-        private readonly string _operationType;
-        private readonly string _operationName;
-        private readonly string? _capabilityName;
-        private readonly IReadOnlyDictionary<string, object?>? _tags;
-        private readonly Stopwatch _stopwatch = Stopwatch.StartNew();
-        private readonly Activity? _activity;
-        private bool _completed;
-
-        public SandboxTelemetryOperation(
-            SandboxTelemetryFacade telemetry,
-            string operationType,
-            string operationName,
-            string? capabilityName,
-            IReadOnlyDictionary<string, object?>? tags)
-        {
-            _telemetry = telemetry;
-            _operationType = operationType;
-            _operationName = operationName;
-            _capabilityName = capabilityName;
-            _tags = tags;
-            _activity = telemetry.StartOperationActivity(operationType, operationName, capabilityName);
-        }
-
-        public void Complete(IReadOnlyDictionary<string, object?>? tags = null)
-        {
-            if (_completed)
-            {
-                return;
-            }
-
-            _stopwatch.Stop();
-            _telemetry.RecordOperationSuccess(
-                _operationType,
-                _operationName,
-                _capabilityName,
-                _stopwatch.Elapsed,
-                MergeTags(_tags, tags));
-            _completed = true;
-            _activity?.Dispose();
-        }
-
-        public void Fail(string errorMessage, string? errorCode = null, IReadOnlyDictionary<string, object?>? tags = null)
-        {
-            ArgumentException.ThrowIfNullOrWhiteSpace(errorMessage);
-            if (_completed)
-            {
-                return;
-            }
-
-            _stopwatch.Stop();
-            _telemetry.RecordOperationFailure(
-                _operationType,
-                _operationName,
-                _capabilityName,
-                errorMessage,
-                errorCode,
-                MergeTags(_tags, tags));
-            _completed = true;
-            _activity?.Dispose();
-        }
-
-        public void Dispose()
-        {
-            if (!_completed)
-            {
-                Complete();
-            }
-        }
-
-        private static IReadOnlyDictionary<string, object?>? MergeTags(
-            IReadOnlyDictionary<string, object?>? first,
-            IReadOnlyDictionary<string, object?>? second)
-        {
-            if (first is null)
-            {
-                return second;
-            }
-
-            if (second is null)
-            {
-                return first;
-            }
-
-            var merged = new Dictionary<string, object?>(first);
-            foreach (var tag in second)
-            {
-                merged[tag.Key] = tag.Value;
-            }
-
-            return merged;
-        }
-    }
-
-    private sealed class NoOpTelemetryOperation : ISandboxTelemetryOperation
-    {
-        public static readonly NoOpTelemetryOperation Instance = new();
-        public void Complete(IReadOnlyDictionary<string, object?>? tags = null) { }
-        public void Fail(string errorMessage, string? errorCode = null, IReadOnlyDictionary<string, object?>? tags = null) { }
-        public void Dispose() { }
-    }
+    #endregion
 }
