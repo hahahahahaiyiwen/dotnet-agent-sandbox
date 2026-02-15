@@ -256,6 +256,65 @@ public class SqlCapabilityTests
         Assert.Equal("Ada", result.Rows[0]["name"]);
     }
 
+    [Fact]
+    public void ExecuteSql_BlocksMutablePragma_WithEqualsOperator()
+    {
+        var dbPath = CreateDatabaseWithSampleRows();
+        try
+        {
+            using (var sandbox = CreateSandbox(dbPath, out _))
+            {
+                var capability = sandbox.GetCapability<ISqlCapability>();
+                var ex = Assert.Throws<SqlCapabilityException>(() => capability.ExecuteSql("PRAGMA query_only=OFF"));
+                Assert.Equal(SqlCapabilityErrorCodes.AuthDenied, ex.ErrorCode);
+                Assert.Contains("Mutable PRAGMA", ex.Message);
+            }
+        }
+        finally
+        {
+            File.Delete(dbPath);
+        }
+    }
+
+    [Fact]
+    public void ExecuteSql_BlocksPragmaWithDisallowedArguments()
+    {
+        var dbPath = CreateDatabaseWithSampleRows();
+        try
+        {
+            using (var sandbox = CreateSandbox(dbPath, out _))
+            {
+                var capability = sandbox.GetCapability<ISqlCapability>();
+                var ex = Assert.Throws<SqlCapabilityException>(() => capability.ExecuteSql("PRAGMA cache_size(2000)"));
+                Assert.Equal(SqlCapabilityErrorCodes.AuthDenied, ex.ErrorCode);
+                Assert.Contains("Mutable PRAGMA", ex.Message);
+            }
+        }
+        finally
+        {
+            File.Delete(dbPath);
+        }
+    }
+
+    [Fact]
+    public void ExecuteSql_AllowsReadOnlyPragma_WithAllowedArguments()
+    {
+        var dbPath = CreateDatabaseWithSampleRows();
+        try
+        {
+            using (var sandbox = CreateSandbox(dbPath, out _))
+            {
+                var capability = sandbox.GetCapability<ISqlCapability>();
+                var result = capability.ExecuteSql("PRAGMA table_info(users)");
+                Assert.NotEmpty(result.Rows);
+            }
+        }
+        finally
+        {
+            File.Delete(dbPath);
+        }
+    }
+
     private static Sandbox CreateSandbox(string dbPath, out SqlSandboxCapability capability, DelegateSandboxObserver? observer = null)
     {
         capability = new SqlSandboxCapability(new SqlCapabilityOptions
