@@ -89,15 +89,7 @@ internal sealed class SandboxTelemetryFacade
             return;
 
         var commandName = SandboxTelemetry.GetCommandName(command);
-        var tags = BuildBaseTags(commandName);
-
-        SandboxTelemetry.CommandsExecuted.Add(1, tags);
-        SandboxTelemetry.CommandDuration.Record(duration.TotalMilliseconds, tags);
-
-        if (!result.Success)
-        {
-            SandboxTelemetry.CommandsFailed.Add(1, tags);
-        }
+        RecordOperationSuccess("shell", commandName, null, duration);
 
         Activity.Current?.SetTag("command.exit_code", result.ExitCode);
         Activity.Current?.SetTag("command.duration_ms", duration.TotalMilliseconds);
@@ -113,6 +105,7 @@ internal sealed class SandboxTelemetryFacade
         if (!TelemetryEnabled)
             return;
 
+        RecordOperationFailure("shell", "execute", null, ex.Message);
         Activity.Current?.SetStatus(ActivityStatusCode.Error, ex.Message);
         EmitErrorEvent("Command", ex.Message, ex);
     }
@@ -143,21 +136,17 @@ internal sealed class SandboxTelemetryFacade
         if (!TelemetryEnabled)
             return;
 
-        var tags = BuildBaseTags("read_file");
-        tags.Add("file.size_bytes", fileSizeBytes);
-        tags.Add("file.read_mode", readMode);
+        var tags = new Dictionary<string, object?>
+        {
+            ["file.path"] = path,
+            ["file.size_bytes"] = fileSizeBytes,
+            ["file.read_mode"] = readMode
+        };
+        if (startLine.HasValue) tags["file.start_line"] = startLine.Value;
+        if (endLine.HasValue) tags["file.end_line"] = endLine.Value;
+        if (linesReturned.HasValue) tags["file.lines_returned"] = linesReturned.Value;
 
-        if (startLine.HasValue)
-            tags.Add("file.start_line", startLine.Value);
-
-        if (endLine.HasValue)
-            tags.Add("file.end_line", endLine.Value);
-
-        if (linesReturned.HasValue)
-            tags.Add("file.lines_returned", linesReturned.Value);
-
-        SandboxTelemetry.CommandsExecuted.Add(1, tags);
-        SandboxTelemetry.CommandDuration.Record(stopwatch.Elapsed.TotalMilliseconds, tags);
+        RecordOperationSuccess("file.read", "read_file", null, stopwatch.Elapsed, tags);
 
         // Set outcome details on activity for trace context (dimension tags already in metrics)
         if (linesReturned.HasValue)
@@ -172,6 +161,7 @@ internal sealed class SandboxTelemetryFacade
         if (!TelemetryEnabled)
             return;
 
+        RecordOperationFailure("file.read", "read_file", null, ex.Message, tags: new Dictionary<string, object?> { ["file.path"] = path });
         Activity.Current?.SetStatus(ActivityStatusCode.Error, ex.Message);
         EmitErrorEvent("FileIO", $"ReadFile failed: {ex.Message}", ex);
     }
@@ -199,12 +189,12 @@ internal sealed class SandboxTelemetryFacade
     {
         if (!TelemetryEnabled)
             return;
-
-        var tags = BuildBaseTags("write_file");
-        tags.Add("file.size_bytes", fileSizeBytes);
-
-        SandboxTelemetry.CommandsExecuted.Add(1, tags);
-        SandboxTelemetry.CommandDuration.Record(stopwatch.Elapsed.TotalMilliseconds, tags);
+        var tags = new Dictionary<string, object?>
+        {
+            ["file.path"] = path,
+            ["file.size_bytes"] = fileSizeBytes
+        };
+        RecordOperationSuccess("file.write", "write_file", null, stopwatch.Elapsed, tags);
 
         // No outcome details to add to activity (size is already in metrics as dimension)
     }
@@ -217,6 +207,7 @@ internal sealed class SandboxTelemetryFacade
         if (!TelemetryEnabled)
             return;
 
+        RecordOperationFailure("file.write", "write_file", null, ex.Message, tags: new Dictionary<string, object?> { ["file.path"] = path });
         Activity.Current?.SetStatus(ActivityStatusCode.Error, ex.Message);
         EmitErrorEvent("FileIO", $"WriteFile failed: {ex.Message}", ex);
     }
@@ -238,18 +229,41 @@ internal sealed class SandboxTelemetryFacade
     }
 
     /// <summary>
+    /// Starts a distributed tracing activity for a generic operation.
+    /// </summary>
+    public Activity? StartOperationActivity(string operationType, string operationName, string? capabilityName = null)
+    {
+        if (!TelemetryEnabled)
+            return null;
+
+        var telemetryOptions = _options.Telemetry!;
+        if (!telemetryOptions.TraceCommands && !telemetryOptions.TraceFileSystem)
+            return null;
+
+        var activity = SandboxTelemetry.StartCommandActivity($"{operationType}:{operationName}", _sandboxId);
+        activity?.SetTag("operation.type", operationType);
+        activity?.SetTag("operation.name", operationName);
+        if (!string.IsNullOrWhiteSpace(capabilityName))
+        {
+            activity?.SetTag("capability.name", capabilityName);
+        }
+
+        return activity;
+    }
+
+    /// <summary>
     /// Records successful patch apply operation metrics.
     /// </summary>
     public void RecordApplyPatchSuccess(string path, Stopwatch stopwatch, long fileSizeBytes)
     {
         if (!TelemetryEnabled)
             return;
-
-        var tags = BuildBaseTags("apply_patch");
-        tags.Add("file.size_bytes", fileSizeBytes);
-
-        SandboxTelemetry.CommandsExecuted.Add(1, tags);
-        SandboxTelemetry.CommandDuration.Record(stopwatch.Elapsed.TotalMilliseconds, tags);
+        var tags = new Dictionary<string, object?>
+        {
+            ["file.path"] = path,
+            ["file.size_bytes"] = fileSizeBytes
+        };
+        RecordOperationSuccess("file.patch", "apply_patch", null, stopwatch.Elapsed, tags);
 
         // No outcome details to add to activity (size is already in metrics as dimension)
     }
@@ -262,6 +276,7 @@ internal sealed class SandboxTelemetryFacade
         if (!TelemetryEnabled)
             return;
 
+        RecordOperationFailure("file.patch", "apply_patch", null, ex.Message, tags: new Dictionary<string, object?> { ["file.path"] = path });
         Activity.Current?.SetStatus(ActivityStatusCode.Error, ex.Message);
         EmitErrorEvent("FileIO", $"ApplyPatch failed: {ex.Message}", ex);
     }
@@ -269,6 +284,71 @@ internal sealed class SandboxTelemetryFacade
     #endregion
 
     #region Internal Helpers
+
+    /// <summary>
+    /// Records successful generic operation metrics.
+    /// </summary>
+    public void RecordOperationSuccess(
+        string operationType,
+        string operationName,
+        string? capabilityName,
+        TimeSpan duration,
+        IReadOnlyDictionary<string, object?>? tags = null)
+    {
+        if (!TelemetryEnabled)
+            return;
+
+        var telemetryTags = BuildOperationTags(operationType, operationName, capabilityName, tags);
+        SandboxTelemetry.CommandsExecuted.Add(1, telemetryTags);
+        SandboxTelemetry.CommandDuration.Record(duration.TotalMilliseconds, telemetryTags);
+
+        Activity.Current?.SetTag("operation.type", operationType);
+        Activity.Current?.SetTag("operation.name", operationName);
+        Activity.Current?.SetTag("operation.duration_ms", duration.TotalMilliseconds);
+        Activity.Current?.SetTag("operation.success", true);
+        if (!string.IsNullOrWhiteSpace(capabilityName))
+        {
+            Activity.Current?.SetTag("capability.name", capabilityName);
+        }
+
+    }
+
+    /// <summary>
+    /// Records failed generic operation metrics and error context.
+    /// </summary>
+    public void RecordOperationFailure(
+        string operationType,
+        string operationName,
+        string? capabilityName,
+        string errorMessage,
+        string? errorCode = null,
+        IReadOnlyDictionary<string, object?>? tags = null)
+    {
+        if (!TelemetryEnabled)
+            return;
+
+        var telemetryTags = BuildOperationTags(operationType, operationName, capabilityName, tags);
+        if (!string.IsNullOrWhiteSpace(errorCode))
+        {
+            telemetryTags.Add("error.code", errorCode);
+        }
+
+        SandboxTelemetry.CommandsExecuted.Add(1, telemetryTags);
+        SandboxTelemetry.CommandsFailed.Add(1, telemetryTags);
+
+        Activity.Current?.SetStatus(ActivityStatusCode.Error, errorMessage);
+        Activity.Current?.SetTag("operation.type", operationType);
+        Activity.Current?.SetTag("operation.name", operationName);
+        Activity.Current?.SetTag("operation.success", false);
+        if (!string.IsNullOrWhiteSpace(errorCode))
+        {
+            Activity.Current?.SetTag("error.code", errorCode);
+        }
+        if (!string.IsNullOrWhiteSpace(capabilityName))
+        {
+            Activity.Current?.SetTag("capability.name", capabilityName);
+        }
+    }
 
     /// <summary>
     /// Builds base TagList with common sandbox tags.
@@ -281,6 +361,30 @@ internal sealed class SandboxTelemetryFacade
             { "command.name", commandName },
             { "service.instance.id", _options.Telemetry!.InstanceId }
         };
+    }
+
+    private TagList BuildOperationTags(
+        string operationType,
+        string operationName,
+        string? capabilityName,
+        IReadOnlyDictionary<string, object?>? tags)
+    {
+        var telemetryTags = BuildBaseTags(operationName);
+        telemetryTags.Add("operation.type", operationType);
+        if (!string.IsNullOrWhiteSpace(capabilityName))
+        {
+            telemetryTags.Add("capability.name", capabilityName);
+        }
+
+        if (tags != null)
+        {
+            foreach (var tag in tags)
+            {
+                telemetryTags.Add(tag.Key, tag.Value);
+            }
+        }
+
+        return telemetryTags;
     }
 
     #endregion

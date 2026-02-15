@@ -60,7 +60,7 @@ public class Sandbox : IDisposable, IObservableSandbox
 
         // Initialize telemetry facade
         _telemetry = new SandboxTelemetryFacade(_options, Id, _observerManager.NotifyObservers);
-        _sandboxTelemetry = new SandboxTelemetryView(TelemetryEnabled);
+        _sandboxTelemetry = new SandboxTelemetryView(_telemetry, TelemetryEnabled);
         
         // Start sandbox-level activity for tracing
         if (TelemetryEnabled)
@@ -707,8 +707,141 @@ public class Sandbox : IDisposable, IObservableSandbox
         }
     }
 
-    private sealed class SandboxTelemetryView(bool enabled) : ISandboxTelemetry
+    private sealed class SandboxTelemetryView : ISandboxTelemetry
     {
-        public bool Enabled { get; } = enabled;
+        private readonly SandboxTelemetryFacade _telemetry;
+        public bool Enabled { get; }
+
+        public SandboxTelemetryView(SandboxTelemetryFacade telemetry, bool enabled)
+        {
+            _telemetry = telemetry;
+            Enabled = enabled;
+        }
+
+        public ISandboxTelemetryOperation StartOperation(
+            string operationType,
+            string operationName,
+            string? capabilityName = null,
+            IReadOnlyDictionary<string, object?>? tags = null)
+        {
+            ArgumentException.ThrowIfNullOrWhiteSpace(operationType);
+            ArgumentException.ThrowIfNullOrWhiteSpace(operationName);
+
+            if (!Enabled)
+            {
+                return NoOpTelemetryOperation.Instance;
+            }
+
+            return new SandboxTelemetryOperation(
+                _telemetry,
+                operationType,
+                operationName,
+                capabilityName,
+                tags);
+        }
+    }
+
+    private sealed class SandboxTelemetryOperation : ISandboxTelemetryOperation
+    {
+        private readonly SandboxTelemetryFacade _telemetry;
+        private readonly string _operationType;
+        private readonly string _operationName;
+        private readonly string? _capabilityName;
+        private readonly IReadOnlyDictionary<string, object?>? _tags;
+        private readonly Stopwatch _stopwatch = Stopwatch.StartNew();
+        private readonly Activity? _activity;
+        private bool _completed;
+
+        public SandboxTelemetryOperation(
+            SandboxTelemetryFacade telemetry,
+            string operationType,
+            string operationName,
+            string? capabilityName,
+            IReadOnlyDictionary<string, object?>? tags)
+        {
+            _telemetry = telemetry;
+            _operationType = operationType;
+            _operationName = operationName;
+            _capabilityName = capabilityName;
+            _tags = tags;
+            _activity = telemetry.StartOperationActivity(operationType, operationName, capabilityName);
+        }
+
+        public void Complete(IReadOnlyDictionary<string, object?>? tags = null)
+        {
+            if (_completed)
+            {
+                return;
+            }
+
+            _stopwatch.Stop();
+            _telemetry.RecordOperationSuccess(
+                _operationType,
+                _operationName,
+                _capabilityName,
+                _stopwatch.Elapsed,
+                MergeTags(_tags, tags));
+            _completed = true;
+            _activity?.Dispose();
+        }
+
+        public void Fail(string errorMessage, string? errorCode = null, IReadOnlyDictionary<string, object?>? tags = null)
+        {
+            ArgumentException.ThrowIfNullOrWhiteSpace(errorMessage);
+            if (_completed)
+            {
+                return;
+            }
+
+            _stopwatch.Stop();
+            _telemetry.RecordOperationFailure(
+                _operationType,
+                _operationName,
+                _capabilityName,
+                errorMessage,
+                errorCode,
+                MergeTags(_tags, tags));
+            _completed = true;
+            _activity?.Dispose();
+        }
+
+        public void Dispose()
+        {
+            if (!_completed)
+            {
+                Complete();
+            }
+        }
+
+        private static IReadOnlyDictionary<string, object?>? MergeTags(
+            IReadOnlyDictionary<string, object?>? first,
+            IReadOnlyDictionary<string, object?>? second)
+        {
+            if (first is null)
+            {
+                return second;
+            }
+
+            if (second is null)
+            {
+                return first;
+            }
+
+            var merged = new Dictionary<string, object?>(first);
+            foreach (var tag in second)
+            {
+                merged[tag.Key] = tag.Value;
+            }
+
+            return merged;
+        }
+    }
+
+    private sealed class NoOpTelemetryOperation : ISandboxTelemetryOperation
+    {
+        public static readonly NoOpTelemetryOperation Instance = new();
+        public void Complete(IReadOnlyDictionary<string, object?>? tags = null) { }
+        public void Fail(string errorMessage, string? errorCode = null, IReadOnlyDictionary<string, object?>? tags = null) { }
+        public void Dispose() { }
     }
 }

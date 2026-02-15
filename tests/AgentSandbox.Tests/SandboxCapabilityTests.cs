@@ -1,5 +1,6 @@
 using AgentSandbox.Core;
 using AgentSandbox.Core.Shell;
+using AgentSandbox.Core.Telemetry;
 using AgentSandbox.Extensions;
 
 namespace AgentSandbox.Tests;
@@ -68,6 +69,29 @@ public class SandboxCapabilityTests
         Assert.Null(capability);
     }
 
+    [Fact]
+    public void Capability_CanEmitTelemetryOperation_ThroughSandboxTelemetry()
+    {
+        var errors = new List<SandboxErrorEvent>();
+        var observer = new DelegateSandboxObserver(onError: e => errors.Add(e));
+        var options = new SandboxOptions
+        {
+            Telemetry = new SandboxTelemetryOptions { Enabled = true },
+            Capabilities =
+            [
+                new TelemetryCapability()
+            ]
+        };
+
+        using var sandbox = new Sandbox(options: options);
+        sandbox.Subscribe(observer);
+
+        var capability = sandbox.GetCapability<ITelemetryCapability>();
+        capability.Run();
+
+        Assert.Empty(errors);
+    }
+
     private sealed class HelloCommand : IShellCommand
     {
         public string Name => "hello";
@@ -94,5 +118,31 @@ public class SandboxCapabilityTests
         }
 
         public string Ping() => "pong";
+    }
+
+    private interface ITelemetryCapability
+    {
+        void Run();
+    }
+
+    private sealed class TelemetryCapability : ISandboxCapability, ITelemetryCapability
+    {
+        private ISandboxTelemetry? _telemetry;
+        public string Name => "telemetry-capability";
+
+        public void Initialize(ISandboxContext context)
+        {
+            _telemetry = context.Telemetry;
+        }
+
+        public void Run()
+        {
+            var operation = _telemetry!.StartOperation(
+                operationType: "capability.demo",
+                operationName: "run",
+                capabilityName: Name,
+                tags: new Dictionary<string, object?> { ["demo.step"] = "sample" });
+            operation.Complete();
+        }
     }
 }
