@@ -265,6 +265,7 @@ public class SqlCapabilityTests
             using (var sandbox = CreateSandbox(dbPath, out _))
             {
                 var capability = sandbox.GetCapability<ISqlCapability>();
+                // PRAGMA statements with = operator are considered mutable (changing database state)
                 var ex = Assert.Throws<SqlCapabilityException>(() => capability.ExecuteSql("PRAGMA query_only=OFF"));
                 Assert.Equal(SqlCapabilityErrorCodes.AuthDenied, ex.ErrorCode);
                 Assert.Contains("Mutable PRAGMA", ex.Message);
@@ -285,6 +286,7 @@ public class SqlCapabilityTests
             using (var sandbox = CreateSandbox(dbPath, out _))
             {
                 var capability = sandbox.GetCapability<ISqlCapability>();
+                // cache_size is not in ReadOnlyPragmasWithArguments list, so it's blocked to prevent state mutation
                 var ex = Assert.Throws<SqlCapabilityException>(() => capability.ExecuteSql("PRAGMA cache_size(2000)"));
                 Assert.Equal(SqlCapabilityErrorCodes.AuthDenied, ex.ErrorCode);
                 Assert.Contains("Mutable PRAGMA", ex.Message);
@@ -305,6 +307,7 @@ public class SqlCapabilityTests
             using (var sandbox = CreateSandbox(dbPath, out _))
             {
                 var capability = sandbox.GetCapability<ISqlCapability>();
+                // table_info is in ReadOnlyPragmasWithArguments list - it only reads schema metadata
                 var result = capability.ExecuteSql("PRAGMA table_info(users)");
                 Assert.NotEmpty(result.Rows);
             }
