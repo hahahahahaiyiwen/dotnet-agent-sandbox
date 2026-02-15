@@ -204,7 +204,7 @@ public class SqlCapabilityTests
     [Fact]
     public void ExecuteSql_RejectsOffsetBeyondConfiguredLimit()
     {
-        var dbPath = CreateDatabaseWithSampleRows();
+        var dbPath = CreateDatabaseWithManyRows(20);
         try
         {
             var capability = new SqlSandboxCapability(new SqlCapabilityOptions
@@ -217,8 +217,17 @@ public class SqlCapabilityTests
             });
             using var sandbox = new Sandbox(options: new SandboxOptions { Capabilities = [capability] });
             var sql = sandbox.GetCapability<ISqlCapability>();
-            var ex = Assert.Throws<SqlCapabilityException>(() => sql.ExecuteSql("SELECT id FROM users", new SqlQueryOptions { Offset = 11 }));
+            
+            // Offset at exactly MaxOffset should succeed
+            var result = sql.ExecuteSql("SELECT id FROM users ORDER BY id", new SqlQueryOptions { Offset = 10 });
+            Assert.NotNull(result);
+            Assert.Equal(10, result.Rows.Count);
+            
+            // Offset beyond MaxOffset should fail
+            var ex = Assert.Throws<SqlCapabilityException>(() => 
+                sql.ExecuteSql("SELECT id FROM users", new SqlQueryOptions { Offset = 11 }));
             Assert.Equal(SqlCapabilityErrorCodes.ResourceLimit, ex.ErrorCode);
+            Assert.Contains("Offset must be between 0 and 10", ex.Message);
         }
         finally
         {
