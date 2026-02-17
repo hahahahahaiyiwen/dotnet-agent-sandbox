@@ -387,7 +387,7 @@ curl "http://localhost:5000/api/sandbox/agent-1/ls?path=/workspace"
 | Environment variables | ✅ | `$VAR`, `$HOME`, `$PWD` |
 | Glob patterns | ✅ | `*.txt`, `src/*.js` |
 | Shell scripts | ✅ | `sh script.sh` or `./script.sh` |
-| Command chaining (`&&`, `\|\|`, `;`) | ❌ | Run commands separately or use scripts |
+| Command chaining (`&&`, `\|\|`, `;`) | ❌ | Run commands separately or use scripts; `&&` errors explicitly while `\|\|` and `;` may produce unclear parsing errors |
 | Pipelines (`\|`) | ❌ | Use file arguments instead |
 | Input redirection (`<`, `<<`) | ❌ | Pass files as arguments |
 | Background jobs (`&`) | ❌ | Returns an error if used |
