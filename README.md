@@ -316,9 +316,14 @@ sandbox.Execute("echo 'Hello' > project/readme.txt");
 | GET | `/api/sandbox/{id}/fs?path=` | Read file |
 | PUT | `/api/sandbox/{id}/fs` | Write file |
 | GET | `/api/sandbox/{id}/ls?path=` | List directory |
-| POST | `/api/sandbox/{id}/snapshot` | Create snapshot |
-| POST | `/api/sandbox/{id}/restore?snapshotId=` | Restore snapshot to a new sandbox instance (returns snapshot metadata) |
+| POST | `/api/sandbox/{id}/snapshot` | Create snapshot (includes schema-versioned metadata fields) |
+| POST | `/api/sandbox/{id}/restore?snapshotId=` | Restore snapshot to a new sandbox instance (returns new sandbox ID + snapshot metadata) |
 | GET | `/api/sandbox/{id}/stats` | Get statistics |
+
+`POST /api/sandbox/{id}/restore` response fields:
+- `restored`, `snapshotId`, `sandboxId`
+- `snapshotCreatedAt`, `snapshotSchemaVersion`, `snapshotSize`, `snapshotFileCount`
+- `snapshotSourceSandboxId`, `snapshotSourceSessionId`
 
 ### Example: Create and Use Sandbox via API
 
@@ -382,10 +387,10 @@ curl "http://localhost:5000/api/sandbox/agent-1/ls?path=/workspace"
 | Environment variables | ✅ | `$VAR`, `$HOME`, `$PWD` |
 | Glob patterns | ✅ | `*.txt`, `src/*.js` |
 | Shell scripts | ✅ | `sh script.sh` or `./script.sh` |
-| Command chaining (`&&`) | ❌ | Run sequential commands in separate calls or scripts |
+| Command chaining (`&&`, `\|\|`, `;`) | ❌ | Run commands separately or use scripts |
 | Pipelines (`\|`) | ❌ | Use file arguments instead |
 | Input redirection (`<`, `<<`) | ❌ | Pass files as arguments |
-| Background jobs (`&`) | ❌ | Not applicable |
+| Background jobs (`&`) | ❌ | Returns an error if used |
 | Command substitution | ❌ | `` `cmd` `` and `$(cmd)` not supported |
 
 **Common Commands Not Available (examples):**
@@ -416,7 +421,7 @@ Extensions provide additional commands and must be registered via `SandboxOption
 |-----------|-------------|---------|
 | `curl` | HTTP client for web requests | `curl -X GET https://api.example.com/data` |
 | `jq` | JSON processor and query tool | `jq '.users[].name' data.json` |
-| `git` | Simulated version control | `git init && git add . && git commit -m "Initial"` |
+| `git` | Simulated version control | `git init` |
 
 **Using Extensions:**
 
@@ -555,6 +560,12 @@ AgentSandbox/
 dotnet build
 dotnet test
 ```
+
+## Documentation Consistency Checklist
+
+- Keep public file-read API examples on `ReadFileLines(path, startLine?, endLine?)`.
+- Keep shell constraint docs aligned with implemented parser behavior (no `|`, chaining, `<`/`<<`, or `&` jobs).
+- Keep snapshot docs aligned with schema-versioned metadata and restore response fields.
 
 ## Building and Referencing as a NuGet Package
 
