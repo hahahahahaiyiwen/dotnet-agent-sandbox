@@ -563,13 +563,25 @@ public class Sandbox : IDisposable, IObservableSandbox
     public SandboxSnapshot CreateSnapshot()
     {
         ThrowIfDisposed();
+        var fileSystemData = _fileSystem.CreateSnapshot();
+        var createdAt = DateTime.UtcNow;
+        var stats = GetStats();
         return new SandboxSnapshot
         {
             Id = Id,
-            FileSystemData = _fileSystem.CreateSnapshot(),
+            FileSystemData = fileSystemData,
             CurrentDirectory = _shell.CurrentDirectory,
             Environment = new Dictionary<string, string>(_shell.Environment),
-            CreatedAt = DateTime.UtcNow
+            CreatedAt = createdAt,
+            Metadata = new SnapshotMetadata
+            {
+                SchemaVersion = 1,
+                SnapshotSizeBytes = fileSystemData.LongLength,
+                FileCount = stats.FileCount,
+                CreatedAt = createdAt,
+                SourceSandboxId = Id,
+                SourceSessionId = Id
+            }
         };
     }
 

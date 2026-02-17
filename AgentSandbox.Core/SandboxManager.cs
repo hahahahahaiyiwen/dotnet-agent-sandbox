@@ -104,6 +104,22 @@ public class SandboxManager : IDisposable
     }
 
     /// <summary>
+    /// Gets metadata for a persisted snapshot.
+    /// </summary>
+    public SnapshotMetadata GetSnapshotMetadata(string snapshotId)
+    {
+        ThrowIfDisposed();
+        EnsureSnapshotStoreConfigured();
+
+        if (!_snapshotStore!.TryGet(snapshotId, out var snapshot) || snapshot is null)
+        {
+            throw new KeyNotFoundException($"Snapshot '{snapshotId}' not found.");
+        }
+
+        return (snapshot.Metadata ?? SnapshotMetadata.FromSnapshot(snapshot)).Clone();
+    }
+
+    /// <summary>
     /// Releases an active sandbox by persisting a snapshot and disposing the sandbox.
     /// </summary>
     public string Release(string sandboxId)

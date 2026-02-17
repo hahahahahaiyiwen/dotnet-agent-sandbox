@@ -185,6 +185,11 @@ sandbox.Execute("sh /skills/python-dev/scripts/setup.sh");
 // Save state
 var snapshot = sandbox.CreateSnapshot();
 
+// Snapshot metadata (schema-versioned)
+var metadata = snapshot.Metadata;
+// metadata.SchemaVersion, metadata.SnapshotSizeBytes, metadata.FileCount,
+// metadata.CreatedAt, metadata.SourceSandboxId, metadata.SourceSessionId
+
 // Restore later
 sandbox.RestoreSnapshot(snapshot);
 ```
@@ -201,6 +206,7 @@ var manager = new SandboxManager(
 
 var sandbox = manager.Get();
 var snapshotId = manager.SaveSnapshot(sandbox.Id);
+var snapshotMetadata = manager.GetSnapshotMetadata(snapshotId);
 var restoredSandbox = manager.RestoreSnapshot(snapshotId); // new sandbox ID
 
 // Persist and release in one lifecycle call

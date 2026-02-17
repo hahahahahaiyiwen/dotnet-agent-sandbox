@@ -202,7 +202,7 @@ public static class SandboxEndpoints
 
         try
         {
-            var content = sandbox.ReadFile(path);
+            var content = string.Join('\n', sandbox.ReadFileLines(path));
 
             return Results.Ok(new FileContentResponse(
                 path,
@@ -301,12 +301,17 @@ public static class SandboxEndpoints
         try
         {
             var snapshotId = manager.SaveSnapshot(id);
+            var metadata = manager.GetSnapshotMetadata(snapshotId);
 
             return Results.Ok(new SnapshotResponse(
                 snapshotId,
                 sandbox.Id,
-                DateTime.UtcNow,
-                0
+                metadata.CreatedAt,
+                metadata.SnapshotSizeBytes,
+                metadata.FileCount,
+                metadata.SchemaVersion,
+                metadata.SourceSandboxId,
+                metadata.SourceSessionId
             ));
         }
         catch (KeyNotFoundException ex)
@@ -330,6 +335,7 @@ public static class SandboxEndpoints
 
         try
         {
+            var metadata = manager.GetSnapshotMetadata(snapshotId);
             var restored = manager.RestoreSnapshot(snapshotId);
 
             lock (_activeSandboxesSync)
@@ -342,7 +348,17 @@ public static class SandboxEndpoints
                 _activeSandboxes[restored.Id] = restored;
             }
 
-            return Results.Ok(new { restored = true, snapshotId, sandboxId = restored.Id });
+            return Results.Ok(new RestoreSnapshotResponse(
+                true,
+                snapshotId,
+                restored.Id,
+                metadata.CreatedAt,
+                metadata.SchemaVersion,
+                metadata.SnapshotSizeBytes,
+                metadata.FileCount,
+                metadata.SourceSandboxId,
+                metadata.SourceSessionId
+            ));
         }
         catch (KeyNotFoundException ex)
         {
