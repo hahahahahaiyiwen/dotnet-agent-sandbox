@@ -495,7 +495,6 @@ To enable automatic cleanup of inactive sandboxes, configure `SandboxManagerOpti
 - Treat each sandbox instance as a single-agent execution context.
 - Do not run overlapping `Execute(...)` operations against the same sandbox instance.
 - For concurrency, create separate sandbox instances with `SandboxManager`.
-- If a concurrent attempt is made against one sandbox, integration layers should fail fast with a deterministic error.
 
 ## Use Cases
 
