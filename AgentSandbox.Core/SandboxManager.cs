@@ -116,7 +116,7 @@ public class SandboxManager : IDisposable
             throw new KeyNotFoundException($"Snapshot '{snapshotId}' not found.");
         }
 
-        return (snapshot.Metadata ?? SnapshotMetadata.CreateDefault()).Clone();
+        return (snapshot.Metadata ?? SnapshotMetadata.FromSnapshot(snapshot)).Clone();
     }
 
     /// <summary>

@@ -354,7 +354,10 @@ public static class SandboxEndpoints
                 restored.Id,
                 metadata.CreatedAt,
                 metadata.SchemaVersion,
-                metadata.SnapshotSizeBytes
+                metadata.SnapshotSizeBytes,
+                metadata.FileCount,
+                metadata.SourceSandboxId,
+                metadata.SourceSessionId
             ));
         }
         catch (KeyNotFoundException ex)

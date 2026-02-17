@@ -196,6 +196,32 @@ public class SandboxManagerTests
     }
 
     [Fact]
+    public void GetSnapshotMetadata_WhenMetadataMissing_BackfillsFromSnapshot()
+    {
+        var store = new InMemorySnapshotStore();
+        var manager = new SandboxManager(
+            defaultOptions: null,
+            managerOptions: new SandboxManagerOptions { SnapshotStore = store });
+        var createdAt = new DateTime(2026, 2, 1, 12, 0, 0, DateTimeKind.Utc);
+        var legacySnapshotId = store.Save(new SandboxSnapshot
+        {
+            Id = "legacy-sandbox",
+            CreatedAt = createdAt,
+            FileSystemData = [1, 2, 3],
+            CurrentDirectory = "/",
+            Environment = new Dictionary<string, string>()
+        });
+
+        var metadata = manager.GetSnapshotMetadata(legacySnapshotId);
+
+        Assert.Equal(1, metadata.SchemaVersion);
+        Assert.Equal(createdAt, metadata.CreatedAt);
+        Assert.Equal(3, metadata.SnapshotSizeBytes);
+        Assert.Equal("legacy-sandbox", metadata.SourceSandboxId);
+        Assert.Equal("legacy-sandbox", metadata.SourceSessionId);
+    }
+
+    [Fact]
     public void RestoreSnapshot_WithoutStoreConfigured_Throws()
     {
         var manager = new SandboxManager();

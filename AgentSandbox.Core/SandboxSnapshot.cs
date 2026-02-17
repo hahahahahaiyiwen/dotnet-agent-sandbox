@@ -10,7 +10,7 @@ public class SandboxSnapshot
     public string CurrentDirectory { get; set; } = "/";
     public Dictionary<string, string> Environment { get; set; } = new();
     public DateTime CreatedAt { get; set; }
-    public SnapshotMetadata Metadata { get; set; } = SnapshotMetadata.CreateDefault();
+    public SnapshotMetadata? Metadata { get; set; }
 }
 
 /// <summary>
@@ -48,10 +48,24 @@ public sealed class SnapshotMetadata
     /// </summary>
     public string SourceSessionId { get; set; } = string.Empty;
 
-    public static SnapshotMetadata CreateDefault() => new()
+    public static SnapshotMetadata CreateDefault(DateTime? createdAt = null) => new()
     {
-        CreatedAt = DateTime.UtcNow
+        CreatedAt = createdAt ?? DateTime.UtcNow
     };
+
+    public static SnapshotMetadata FromSnapshot(SandboxSnapshot snapshot)
+    {
+        ArgumentNullException.ThrowIfNull(snapshot);
+
+        return new SnapshotMetadata
+        {
+            SchemaVersion = 1,
+            SnapshotSizeBytes = snapshot.FileSystemData.LongLength,
+            CreatedAt = snapshot.CreatedAt,
+            SourceSandboxId = snapshot.Id,
+            SourceSessionId = snapshot.Id
+        };
+    }
 
     public SnapshotMetadata Clone() => new()
     {
