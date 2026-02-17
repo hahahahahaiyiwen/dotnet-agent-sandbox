@@ -48,7 +48,8 @@ public sealed class InMemorySnapshotStore : ISnapshotStore
             FileSystemData = snapshot.FileSystemData.ToArray(),
             CurrentDirectory = snapshot.CurrentDirectory,
             Environment = new Dictionary<string, string>(snapshot.Environment),
-            CreatedAt = snapshot.CreatedAt
+            CreatedAt = snapshot.CreatedAt,
+            Metadata = (snapshot.Metadata ?? SnapshotMetadata.CreateDefault()).Clone()
         };
     }
 }

@@ -56,7 +56,20 @@ public record SnapshotResponse(
     string Id,
     string SandboxId,
     DateTime CreatedAt,
-    long Size
+    long Size,
+    int FileCount,
+    int SchemaVersion,
+    string SourceSandboxId,
+    string SourceSessionId
+);
+
+public record RestoreSnapshotResponse(
+    bool Restored,
+    string SnapshotId,
+    string SandboxId,
+    DateTime SnapshotCreatedAt,
+    int SnapshotSchemaVersion,
+    long SnapshotSize
 );
 
 public record StatsResponse(

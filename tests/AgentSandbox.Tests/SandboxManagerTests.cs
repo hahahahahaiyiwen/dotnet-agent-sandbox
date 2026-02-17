@@ -173,6 +173,29 @@ public class SandboxManagerTests
     }
 
     [Fact]
+    public void SaveSnapshot_PersistsMetadata_AndManagerCanReadIt()
+    {
+        var store = new InMemorySnapshotStore();
+        var manager = new SandboxManager(
+            defaultOptions: null,
+            managerOptions: new SandboxManagerOptions { SnapshotStore = store });
+        var sandbox = manager.Get();
+
+        sandbox.Execute("mkdir -p /project");
+        sandbox.Execute("echo 'hello' > /project/readme.txt");
+
+        var snapshotId = manager.SaveSnapshot(sandbox.Id);
+        var metadata = manager.GetSnapshotMetadata(snapshotId);
+
+        Assert.Equal(1, metadata.SchemaVersion);
+        Assert.Equal(sandbox.Id, metadata.SourceSandboxId);
+        Assert.Equal(sandbox.Id, metadata.SourceSessionId);
+        Assert.True(metadata.SnapshotSizeBytes > 0);
+        Assert.True(metadata.FileCount >= 2);
+        Assert.True(metadata.CreatedAt <= DateTime.UtcNow);
+    }
+
+    [Fact]
     public void RestoreSnapshot_WithoutStoreConfigured_Throws()
     {
         var manager = new SandboxManager();
