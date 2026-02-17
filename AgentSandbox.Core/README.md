@@ -169,7 +169,7 @@ sandbox.Execute("sh /skills/python-dev/scripts/setup.sh");
 
 **Not Supported:**
 - Pipelines (`|`) - use file arguments instead: `grep pattern file.txt`
-- Command chaining (`&&`) - run commands separately or use scripts
+- Command chaining (`&&`, `||`, `;`) - run commands separately or use scripts
 - Input redirection (`<`, `<<`) - pass files as arguments
 - Background jobs (`&`) - returns an error if used
 - Command substitution (`` `cmd` `` or `$(cmd)`) - returns an error if used
