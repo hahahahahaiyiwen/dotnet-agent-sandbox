@@ -490,6 +490,12 @@ sandbox1.Dispose();
 
 To enable automatic cleanup of inactive sandboxes, configure `SandboxManagerOptions.CleanupInterval` and `InactivityTimeout`.
 
+## Integration Invariant: Single Active Executor per Sandbox
+
+- Treat each sandbox instance as a single-agent execution context.
+- Do not run overlapping `Execute(...)` operations against the same sandbox instance.
+- For concurrency, create separate sandbox instances with `SandboxManager`.
+
 ## Use Cases
 
 1. **AI Agent Execution**: Provide agents with isolated file/command environments
@@ -566,6 +572,7 @@ dotnet test
 - Keep public file-read API examples on `ReadFileLines(path, startLine?, endLine?)`.
 - Keep shell constraint docs aligned with implemented parser behavior (no `|`, chaining, `<`/`<<`, or `&` jobs).
 - Keep snapshot docs aligned with schema-versioned metadata and restore response fields.
+- Keep the single-active-executor-per-sandbox invariant explicit in public integration docs.
 
 ## Building and Referencing as a NuGet Package
 

@@ -11,6 +11,7 @@ A lightweight, in-memory virtual filesystem and shell for AI agents. Zero extern
 2. **One agent-session = one sandbox instance**:
    - Single-threaded ownership model by design
    - No shared mutable runtime within a session, so no thread-safety coordination in the sandbox core
+   - Integrators must treat each sandbox as single-owner execution context (no overlapping command execution in one sandbox)
 3. **Cross-session state transition via snapshots**:
    - Session handoff and recovery are done through snapshot create/restore
    - Filesystem, working directory, and environment state are portable checkpoint data
@@ -26,6 +27,12 @@ A lightweight, in-memory virtual filesystem and shell for AI agents. Zero extern
 ## Non-goals / Constraints
 - Shell intentionally does not support pipes, command chaining (`&&`, `||`, `;`), or stdin redirection.
 - Sandbox internals are single-threaded by design; concurrency is handled by separate sandbox instances at orchestration level.
+
+## Integration Invariant: Single Active Executor per Sandbox
+- A sandbox instance is a single-agent execution lane.
+- Public integrations should not dispatch concurrent `Execute` calls to the same sandbox.
+- For parallel work, allocate separate sandbox instances via `SandboxManager`.
+- When this invariant is violated, host integrations should fail fast with a deterministic integration-level error instead of queuing or interleaving execution.
 
 ## Design Outcome
 The system optimizes for simplicity, correctness, and reproducibility over broad API surface area: agents get just enough primitives to work effectively, and orchestration-level continuity is handled explicitly via snapshot-based state transfer.
