@@ -104,6 +104,18 @@ internal static class ShellLexer
                             "  - Execute commands separately and check results\n" +
                             "  - Use shell scripts (.sh) to sequence commands");
                         return false;
+                    case "||":
+                        error = ShellResult.Error(
+                            "Command chaining (||) is not supported. Workarounds:\n" +
+                            "  - Execute commands separately and check results\n" +
+                            "  - Use shell scripts (.sh) to sequence commands");
+                        return false;
+                    case ";":
+                        error = ShellResult.Error(
+                            "Command separators (;) are not supported. Workarounds:\n" +
+                            "  - Execute commands separately\n" +
+                            "  - Use shell scripts (.sh) to sequence commands");
+                        return false;
                     case "&":
                         error = ShellResult.Error(
                             "Background jobs (&) are not supported. Workarounds:\n" +
@@ -190,8 +202,18 @@ internal static class ShellLexer
         if (c == '|')
         {
             if (index + 1 < commandLine.Length && commandLine[index + 1] == '|')
-                return false;
+            {
+                op = "||";
+                index++;
+                return true;
+            }
             op = "|";
+            return true;
+        }
+
+        if (c == ';')
+        {
+            op = ";";
             return true;
         }
 

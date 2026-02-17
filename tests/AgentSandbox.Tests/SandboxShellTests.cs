@@ -234,6 +234,24 @@ public class SandboxShellTests
     }
 
     [Fact]
+    public void CommandChaining_OrOr_ReturnsExplicitError()
+    {
+        var result = _shell.Execute("echo a || echo b");
+
+        Assert.False(result.Success);
+        Assert.Contains("Command chaining (||) is not supported", result.Stderr);
+    }
+
+    [Fact]
+    public void CommandSeparator_Semicolon_ReturnsExplicitError()
+    {
+        var result = _shell.Execute("echo a; echo b");
+
+        Assert.False(result.Success);
+        Assert.Contains("Command separators (;) are not supported", result.Stderr);
+    }
+
+    [Fact]
     public void Help_ListsAvailableCommands()
     {
         var result = _shell.Execute("help");
