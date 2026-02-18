@@ -278,7 +278,7 @@ public static class SandboxTelemetryHelper
             SandboxId = sandboxId,
             LifecycleType = lifecycleType,
             Details = details,
-            HostCorrelationMetadata = hostCorrelationMetadata is null
+            HostCorrelationMetadata = hostCorrelationMetadata is null || hostCorrelationMetadata.Count == 0
                 ? null
                 : new Dictionary<string, string>(hostCorrelationMetadata, StringComparer.Ordinal),
             TraceId = activity?.TraceId.ToString(),

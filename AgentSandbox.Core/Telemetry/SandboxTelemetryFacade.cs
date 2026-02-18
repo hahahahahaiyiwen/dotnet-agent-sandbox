@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Diagnostics.Metrics;
+using System.Globalization;
 using AgentSandbox.Core.Capabilities;
 using AgentSandbox.Core.Shell;
 
@@ -74,7 +75,7 @@ internal sealed class SandboxTelemetryFacade
 
         EmitLifecycleEvent(
             SandboxLifecycleType.Executed,
-            $"command={commandName}; exitCode={exitCode}; durationMs={duration.TotalMilliseconds:F1}");
+            $"command={commandName}; exitCode={exitCode}; durationMs={duration.TotalMilliseconds.ToString("F1", CultureInfo.InvariantCulture)}");
     }
 
     /// <summary>

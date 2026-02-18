@@ -143,8 +143,23 @@ public class LoggingSandboxObserver : ISandboxObserver
         if (metadata is null || metadata.Count == 0)
             return null;
 
-        return string.Join(", ", metadata.OrderBy(kvp => kvp.Key, StringComparer.Ordinal)
-            .Select(kvp => $"{kvp.Key}={kvp.Value}"));
+        const int maxPairs = 20;
+        const int maxCorrelationLength = 500;
+
+        var orderedPairs = metadata
+            .OrderBy(kvp => kvp.Key, StringComparer.Ordinal)
+            .Take(maxPairs)
+            .Select(kvp => $"{kvp.Key}={kvp.Value}");
+
+        var result = string.Join(", ", orderedPairs);
+
+        if (metadata.Count > maxPairs)
+        {
+            var remaining = metadata.Count - maxPairs;
+            result += $" (+{remaining} more)";
+        }
+
+        return TruncateString(result, maxCorrelationLength);
     }
 }
 
