@@ -222,6 +222,7 @@ public class Sandbox : IDisposable, IObservableSandbox
                 timeoutResult.Duration = stopwatch.Elapsed;
                 AppendShellOperation(timeoutResult);
                 _telemetry.RecordCommandError(new TimeoutException(timeoutResult.Stderr));
+                _telemetry.RecordSandboxExecuted(SandboxTelemetryHelper.GetCommandName(command), timeoutResult.ExitCode, timeoutResult.Duration);
                 return timeoutResult;
             }
 
@@ -231,12 +232,15 @@ public class Sandbox : IDisposable, IObservableSandbox
             stopwatch.Stop();
 
             _telemetry.RecordCommandSuccess(command, result, stopwatch.Elapsed);
+            _telemetry.RecordSandboxExecuted(SandboxTelemetryHelper.GetCommandName(command), result.ExitCode, stopwatch.Elapsed);
 
             return result;
         }
         catch (Exception ex)
         {
+            stopwatch.Stop();
             _telemetry.RecordCommandError(ex);
+            _telemetry.RecordSandboxExecuted(SandboxTelemetryHelper.GetCommandName(command), -1, stopwatch.Elapsed);
             throw;
         }
         finally
@@ -600,6 +604,7 @@ public class Sandbox : IDisposable, IObservableSandbox
         }
         
         LastActivityAt = DateTime.UtcNow;
+        _telemetry.RecordSnapshotRestored(snapshot.Id);
     }
 
     #endregion

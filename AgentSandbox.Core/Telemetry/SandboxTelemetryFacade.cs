@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Diagnostics.Metrics;
+using System.Globalization;
 using AgentSandbox.Core.Capabilities;
 using AgentSandbox.Core.Shell;
 
@@ -62,6 +63,32 @@ internal sealed class SandboxTelemetryFacade
             new KeyValuePair<string, object?>("service.instance.id", instanceId));
         SandboxTelemetryHelper.ActiveSandboxes.Add(-1,
             new KeyValuePair<string, object?>("service.instance.id", instanceId));
+    }
+
+    /// <summary>
+    /// Records sandbox execution lifecycle audit event.
+    /// </summary>
+    public void RecordSandboxExecuted(string commandName, int exitCode, TimeSpan duration)
+    {
+        if (!TelemetryEnabled)
+            return;
+
+        EmitLifecycleEvent(
+            SandboxLifecycleType.Executed,
+            $"command={commandName}; exitCode={exitCode}; durationMs={duration.TotalMilliseconds.ToString("F1", CultureInfo.InvariantCulture)}");
+    }
+
+    /// <summary>
+    /// Records sandbox snapshot restore lifecycle audit event.
+    /// </summary>
+    public void RecordSnapshotRestored(string? snapshotId = null)
+    {
+        if (!TelemetryEnabled)
+            return;
+
+        EmitLifecycleEvent(
+            SandboxLifecycleType.SnapshotRestored,
+            snapshotId is null ? null : $"snapshotId={snapshotId}");
     }
 
     #endregion
@@ -418,6 +445,7 @@ internal sealed class SandboxTelemetryFacade
             _sandboxId,
             lifecycleType,
             details,
+            _options.Telemetry?.HostCorrelationMetadata,
             Activity.Current));
     }
 

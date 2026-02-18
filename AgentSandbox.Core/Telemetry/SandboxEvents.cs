@@ -149,6 +149,11 @@ public record SandboxLifecycleEvent : SandboxEvent
     /// Additional details about the lifecycle event.
     /// </summary>
     public string? Details { get; init; }
+
+    /// <summary>
+    /// Optional host-provided correlation metadata for audit and compliance workflows.
+    /// </summary>
+    public IReadOnlyDictionary<string, string>? HostCorrelationMetadata { get; init; }
 }
 
 /// <summary>
@@ -157,6 +162,7 @@ public record SandboxLifecycleEvent : SandboxEvent
 public enum SandboxLifecycleType
 {
     Created,
+    Executed,
     Disposed,
     SnapshotCreated,
     SnapshotRestored

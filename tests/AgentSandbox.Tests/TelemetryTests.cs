@@ -49,6 +49,48 @@ public class TelemetryTests
     }
 
     [Fact]
+    public void Sandbox_LifecycleEvents_IncludeExecutionRestoreAndCorrelationMetadata()
+    {
+        var events = new List<SandboxLifecycleEvent>();
+        var observer = new DelegateSandboxObserver(onLifecycleEvent: e => events.Add(e));
+
+        var options = new SandboxOptions
+        {
+            Telemetry = new SandboxTelemetryOptions
+            {
+                Enabled = true,
+                HostCorrelationMetadata = new Dictionary<string, string>
+                {
+                    ["tenantId"] = "tenant-123",
+                    ["requestId"] = "req-456"
+                }
+            }
+        };
+
+        using var sandbox = new Sandbox(options: options);
+        sandbox.Subscribe(observer);
+
+        sandbox.Execute("echo hello");
+        var snapshot = sandbox.CreateSnapshot();
+        sandbox.RestoreSnapshot(snapshot);
+        sandbox.Dispose();
+
+        var executedEvent = Assert.Single(events.Where(e => e.LifecycleType == SandboxLifecycleType.Executed));
+        Assert.Contains("command=echo", executedEvent.Details);
+        Assert.Equal("tenant-123", executedEvent.HostCorrelationMetadata!["tenantId"]);
+        Assert.Equal("req-456", executedEvent.HostCorrelationMetadata["requestId"]);
+
+        var restoreEvent = Assert.Single(events.Where(e => e.LifecycleType == SandboxLifecycleType.SnapshotRestored));
+        Assert.Contains(snapshot.Id, restoreEvent.Details);
+        Assert.Equal("tenant-123", restoreEvent.HostCorrelationMetadata!["tenantId"]);
+        Assert.Equal("req-456", restoreEvent.HostCorrelationMetadata["requestId"]);
+
+        var disposeEvent = Assert.Single(events.Where(e => e.LifecycleType == SandboxLifecycleType.Disposed));
+        Assert.Equal("tenant-123", disposeEvent.HostCorrelationMetadata!["tenantId"]);
+        Assert.Equal("req-456", disposeEvent.HostCorrelationMetadata["requestId"]);
+    }
+
+    [Fact]
     public void Sandbox_WithTelemetryEnabled_EmitsCommandExecutedEvents()
     {
         var events = new List<CommandExecutedEvent>();

@@ -104,6 +104,7 @@ public class LoggingSandboxObserver : ISandboxObserver
         var level = e.LifecycleType switch
         {
             SandboxLifecycleType.Created => LogLevel.Information,
+            SandboxLifecycleType.Executed => LogLevel.Debug,
             SandboxLifecycleType.Disposed => LogLevel.Information,
             SandboxLifecycleType.SnapshotCreated => LogLevel.Debug,
             SandboxLifecycleType.SnapshotRestored => LogLevel.Debug,
@@ -112,10 +113,11 @@ public class LoggingSandboxObserver : ISandboxObserver
 
         _logger.Log(
             level,
-            "Sandbox {LifecycleType} [SandboxId={SandboxId}, Details={Details}]",
+            "Sandbox {LifecycleType} [SandboxId={SandboxId}, Details={Details}, Correlation={Correlation}]",
             e.LifecycleType,
             e.SandboxId,
-            e.Details);
+            e.Details,
+            FormatCorrelationMetadata(e.HostCorrelationMetadata));
     }
 
     /// <inheritdoc />
@@ -134,6 +136,30 @@ public class LoggingSandboxObserver : ISandboxObserver
         if (value == null || value.Length <= maxLength)
             return value;
         return value[..maxLength] + "...";
+    }
+
+    private static string? FormatCorrelationMetadata(IReadOnlyDictionary<string, string>? metadata)
+    {
+        if (metadata is null || metadata.Count == 0)
+            return null;
+
+        const int maxPairs = 20;
+        const int maxCorrelationLength = 500;
+
+        var orderedPairs = metadata
+            .OrderBy(kvp => kvp.Key, StringComparer.Ordinal)
+            .Take(maxPairs)
+            .Select(kvp => $"{kvp.Key}={kvp.Value}");
+
+        var result = string.Join(", ", orderedPairs);
+
+        if (metadata.Count > maxPairs)
+        {
+            var remaining = metadata.Count - maxPairs;
+            result += $" (+{remaining} more)";
+        }
+
+        return TruncateString(result, maxCorrelationLength);
     }
 }
 

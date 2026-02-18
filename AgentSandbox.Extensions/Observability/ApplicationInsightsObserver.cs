@@ -12,6 +12,9 @@ public class ApplicationInsightsObserver : ISandboxObserver
 {
     private readonly TelemetryClient _telemetryClient;
     private readonly ApplicationInsightsObserverOptions _options;
+    private const int MaxCorrelationProperties = 20;
+    private const int MaxCorrelationKeyLength = 100;
+    private const int MaxCorrelationValueLength = 500;
 
     /// <summary>
     /// Creates a new ApplicationInsightsObserver.
@@ -151,6 +154,8 @@ public class ApplicationInsightsObserver : ISandboxObserver
         if (!string.IsNullOrEmpty(e.Details))
             telemetry.Properties["Details"] = e.Details;
 
+        AddCorrelationMetadata(telemetry, e.HostCorrelationMetadata);
+
         if (!string.IsNullOrEmpty(e.TraceId))
             telemetry.Properties["TraceId"] = e.TraceId;
 
@@ -184,6 +189,31 @@ public class ApplicationInsightsObserver : ISandboxObserver
         if (value.Length <= maxLength)
             return value;
         return value[..maxLength] + "...";
+    }
+
+    private static void AddCorrelationMetadata(EventTelemetry telemetry, IReadOnlyDictionary<string, string>? metadata)
+    {
+        if (metadata is null || metadata.Count == 0)
+        {
+            return;
+        }
+
+        foreach (var pair in metadata.Take(MaxCorrelationProperties))
+        {
+            if (string.IsNullOrWhiteSpace(pair.Key))
+            {
+                continue;
+            }
+
+            var key = TruncateString(pair.Key, MaxCorrelationKeyLength);
+            var value = TruncateString(pair.Value ?? string.Empty, MaxCorrelationValueLength);
+            telemetry.Properties[$"Correlation.{key}"] = value;
+        }
+
+        if (metadata.Count > MaxCorrelationProperties)
+        {
+            telemetry.Properties["Correlation.TruncatedCount"] = (metadata.Count - MaxCorrelationProperties).ToString();
+        }
     }
 }
 
