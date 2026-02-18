@@ -64,6 +64,32 @@ internal sealed class SandboxTelemetryFacade
             new KeyValuePair<string, object?>("service.instance.id", instanceId));
     }
 
+    /// <summary>
+    /// Records sandbox execution lifecycle audit event.
+    /// </summary>
+    public void RecordSandboxExecuted(string commandName, int exitCode, TimeSpan duration)
+    {
+        if (!TelemetryEnabled)
+            return;
+
+        EmitLifecycleEvent(
+            SandboxLifecycleType.Executed,
+            $"command={commandName}; exitCode={exitCode}; durationMs={duration.TotalMilliseconds:F1}");
+    }
+
+    /// <summary>
+    /// Records sandbox snapshot restore lifecycle audit event.
+    /// </summary>
+    public void RecordSnapshotRestored(string? snapshotId = null)
+    {
+        if (!TelemetryEnabled)
+            return;
+
+        EmitLifecycleEvent(
+            SandboxLifecycleType.SnapshotRestored,
+            snapshotId is null ? null : $"snapshotId={snapshotId}");
+    }
+
     #endregion
 
     #region Command Execution Telemetry
@@ -418,6 +444,7 @@ internal sealed class SandboxTelemetryFacade
             _sandboxId,
             lifecycleType,
             details,
+            _options.Telemetry?.HostCorrelationMetadata,
             Activity.Current));
     }
 

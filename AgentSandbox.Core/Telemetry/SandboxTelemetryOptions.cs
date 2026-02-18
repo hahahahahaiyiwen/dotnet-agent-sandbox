@@ -50,4 +50,10 @@ public class SandboxTelemetryOptions
     /// Redact file contents from traces and logs. Default: true.
     /// </summary>
     public bool RedactFileContents { get; set; } = true;
+
+    /// <summary>
+    /// Optional host-provided correlation metadata attached to emitted lifecycle audit events.
+    /// Use stable identifiers (e.g., tenantId, sessionId, requestId) and avoid sensitive values.
+    /// </summary>
+    public Dictionary<string, string> HostCorrelationMetadata { get; set; } = new(StringComparer.Ordinal);
 }

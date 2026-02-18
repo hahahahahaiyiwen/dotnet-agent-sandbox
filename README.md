@@ -225,7 +225,15 @@ var telemetryClient = new TelemetryClient(configuration);
 // Enable telemetry in sandbox options
 var options = new SandboxOptions
 {
-    Telemetry = new SandboxTelemetryOptions { Enabled = true }
+    Telemetry = new SandboxTelemetryOptions
+    {
+        Enabled = true,
+        HostCorrelationMetadata = new Dictionary<string, string>
+        {
+            ["tenantId"] = "tenant-123",
+            ["requestId"] = "req-456"
+        }
+    }
 };
 var sandbox = new Sandbox(options: options);
 
@@ -237,6 +245,9 @@ using var subscription = sandbox.AddApplicationInsights(telemetryClient, opts =>
     opts.TrackLifecycle = true;
 });
 ```
+
+Lifecycle observability includes sandbox `Created`, `Executed`, `SnapshotRestored`, and `Disposed` events.
+For compliance retention, export events to your host telemetry backend and enforce retention/archival in host infrastructure (rather than sandbox memory).
 
 ### Use with Structured Logging (ILogger)
 

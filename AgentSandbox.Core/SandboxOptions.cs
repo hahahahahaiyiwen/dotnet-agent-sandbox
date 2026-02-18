@@ -127,7 +127,21 @@ public class SandboxOptions
         {
             BasePath = AgentSkills.BasePath
         },
-        Telemetry = Telemetry,
+        Telemetry = Telemetry is null
+            ? null
+            : new SandboxTelemetryOptions
+            {
+                Enabled = Telemetry.Enabled,
+                InstanceId = Telemetry.InstanceId,
+                TraceCommands = Telemetry.TraceCommands,
+                TraceFileSystem = Telemetry.TraceFileSystem,
+                CollectMetrics = Telemetry.CollectMetrics,
+                EnableLogging = Telemetry.EnableLogging,
+                MinTraceDuration = Telemetry.MinTraceDuration,
+                MaxOutputLength = Telemetry.MaxOutputLength,
+                RedactFileContents = Telemetry.RedactFileContents,
+                HostCorrelationMetadata = new Dictionary<string, string>(Telemetry.HostCorrelationMetadata, StringComparer.Ordinal)
+            },
         SecretBroker = SecretBroker,
         Journal = new SandboxOperationJournalOptions
         {

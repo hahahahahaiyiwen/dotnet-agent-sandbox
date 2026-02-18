@@ -151,6 +151,14 @@ public class ApplicationInsightsObserver : ISandboxObserver
         if (!string.IsNullOrEmpty(e.Details))
             telemetry.Properties["Details"] = e.Details;
 
+        if (e.HostCorrelationMetadata is not null)
+        {
+            foreach (var pair in e.HostCorrelationMetadata)
+            {
+                telemetry.Properties[$"Correlation.{pair.Key}"] = pair.Value;
+            }
+        }
+
         if (!string.IsNullOrEmpty(e.TraceId))
             telemetry.Properties["TraceId"] = e.TraceId;
 
