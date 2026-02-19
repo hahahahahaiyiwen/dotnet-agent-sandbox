@@ -485,6 +485,25 @@ var options = new SandboxOptions
 var sandbox = new Sandbox("my-agent", options);
 ```
 
+### Secret Policy Model
+
+Use `SecretBroker` plus `SecretPolicy` to enforce command-level secret allowlists, max-age, and egress host constraints:
+
+```csharp
+var options = new SandboxOptions
+{
+    SecretBroker = mySecretBroker,
+    SecretPolicy = new SecretResolutionPolicy
+    {
+        AllowedRefs = new HashSet<string>(StringComparer.Ordinal) { "api-token" },
+        MaxSecretAge = TimeSpan.FromMinutes(5),
+        EgressHostAllowlistHook = context => context.DestinationUri.Host == "api.example.com"
+    }
+};
+```
+
+For `curl`, you can additionally enforce a per-command allowlist with repeatable `--allowed-ref <ref>` arguments.
+
 ## Multi-Sandbox Management
 
 ```csharp

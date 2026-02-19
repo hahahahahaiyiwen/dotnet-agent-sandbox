@@ -53,7 +53,7 @@ public class Sandbox : IDisposable, IObservableSandbox
         _fileSystem = new FileSystem.FileSystem(fsOptions);
         
         // Initialize shell and module managers
-        _shell = new SandboxShell(_fileSystem, _options.SecretBroker);
+        _shell = new SandboxShell(_fileSystem, _options.SecretBroker, _options.SecretPolicy);
         _fileImportManager = new FileImportManager(_fileSystem);
         _skillManager = new SkillManager(_fileSystem);
         _operationJournal = new SandboxOperationJournal(_options.Journal);

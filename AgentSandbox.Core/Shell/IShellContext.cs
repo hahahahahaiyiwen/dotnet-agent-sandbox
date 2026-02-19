@@ -29,14 +29,14 @@ public interface IShellContext
     string ResolvePath(string path);
 
     /// <summary>
-    /// Resolves a secret reference to its value using host-provided broker.
-    /// Returns false when the reference cannot be resolved.
+    /// Resolves a secret reference to its value using host-provided broker and policy constraints.
+    /// Returns false when resolution is denied or the reference cannot be resolved.
     /// </summary>
     /// <remarks>
     /// Callers must treat resolved values as sensitive and avoid logging or persisting them.
     /// Implementations may track resolved values for output redaction.
     /// </remarks>
-    bool TryResolveSecret(string secretRef, out string secretValue);
+    bool TryResolveSecret(string secretRef, SecretAccessRequest request, out string secretValue, out string? errorMessage);
 
     /// <summary>
     /// Gets or creates a cached value scoped to this session.

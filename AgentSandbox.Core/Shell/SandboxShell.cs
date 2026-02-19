@@ -24,6 +24,7 @@ public class SandboxShell : IShellContext, ISandboxShellHost
     private readonly Dictionary<string, IShellCommand> _extensionCommands = new();
     private readonly Dictionary<object, object> _sessionCache = new();
     private readonly ISecretBroker? _secretBroker;
+    private readonly SecretResolutionPolicy? _secretPolicy;
     private readonly HashSet<string> _resolvedSecrets = new(StringComparer.Ordinal);
 
     #endregion
@@ -42,19 +43,68 @@ public class SandboxShell : IShellContext, ISandboxShellHost
     
     string IShellContext.ResolvePath(string path) => ResolvePath(path);
 
-    bool IShellContext.TryResolveSecret(string secretRef, out string secretValue)
+    bool IShellContext.TryResolveSecret(string secretRef, SecretAccessRequest request, out string secretValue, out string? errorMessage)
     {
-        if (_secretBroker == null || !_secretBroker.TryResolve(secretRef, out secretValue))
+        if (request.AllowedRefs != null && !request.AllowedRefs.Contains(secretRef))
         {
             secretValue = string.Empty;
+            errorMessage = $"secretRef '{secretRef}' is not allowed by command policy";
             return false;
         }
 
-        if (!string.IsNullOrEmpty(secretValue))
+        if (_secretPolicy?.AllowedRefs != null && !_secretPolicy.AllowedRefs.Contains(secretRef))
         {
-            _resolvedSecrets.Add(secretValue);
+            secretValue = string.Empty;
+            errorMessage = $"secretRef '{secretRef}' is not allowed by sandbox policy";
+            return false;
         }
 
+        if (request.DestinationUri != null && _secretPolicy?.EgressHostAllowlistHook != null)
+        {
+            var egressAllowed = _secretPolicy.EgressHostAllowlistHook(new SecretEgressContext(secretRef, request.DestinationUri, request.CommandName));
+            if (!egressAllowed)
+            {
+                secretValue = string.Empty;
+                errorMessage = $"egress host '{request.DestinationUri.Host}' is not allowed for secretRef '{secretRef}'";
+                return false;
+            }
+        }
+
+        if (_secretBroker == null || !_secretBroker.TryResolve(secretRef, out ResolvedSecret resolvedSecret))
+        {
+            secretValue = string.Empty;
+            errorMessage = $"unknown secretRef '{secretRef}'";
+            return false;
+        }
+
+        if (_secretPolicy?.MaxSecretAge is TimeSpan maxSecretAge)
+        {
+            if (!resolvedSecret.ResolvedAt.HasValue)
+            {
+                secretValue = string.Empty;
+                errorMessage = $"secretRef '{secretRef}' is missing resolved timestamp required by max-age policy";
+                return false;
+            }
+
+            var secretAge = DateTimeOffset.UtcNow - resolvedSecret.ResolvedAt.Value;
+            if (secretAge > maxSecretAge)
+            {
+                secretValue = string.Empty;
+                errorMessage = $"secretRef '{secretRef}' exceeds max-age policy";
+                return false;
+            }
+        }
+
+        secretValue = resolvedSecret.Value;
+        if (string.IsNullOrEmpty(secretValue))
+        {
+            errorMessage = null;
+            return false;
+        }
+
+        _resolvedSecrets.Add(secretValue);
+
+        errorMessage = null;
         return true;
     }
 
@@ -73,10 +123,11 @@ public class SandboxShell : IShellContext, ISandboxShellHost
 
     #region Constructor
 
-    public SandboxShell(IFileSystem fileSystem, ISecretBroker? secretBroker = null)
+    public SandboxShell(IFileSystem fileSystem, ISecretBroker? secretBroker = null, SecretResolutionPolicy? secretPolicy = null)
     {
         _fs = fileSystem;
         _secretBroker = secretBroker;
+        _secretPolicy = secretPolicy;
         
         _environment["PWD"] = _currentDirectory;
 

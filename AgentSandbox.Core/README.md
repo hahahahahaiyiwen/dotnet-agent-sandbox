@@ -80,6 +80,25 @@ var sandbox = new Sandbox("agent-1", options);
 
 `ReadFileLines`, `WriteFile`, and `ApplyPatch` reject path inputs that contain `..` traversal segments.
 
+### Secret Policy Model
+
+You can constrain secret usage for network-enabled commands (for example `curl`) using `SecretBroker` and `SecretPolicy`:
+
+```csharp
+var options = new SandboxOptions
+{
+    SecretBroker = mySecretBroker,
+    SecretPolicy = new SecretResolutionPolicy
+    {
+        AllowedRefs = new HashSet<string>(StringComparer.Ordinal) { "api-token", "service-token" },
+        MaxSecretAge = TimeSpan.FromMinutes(10),
+        EgressHostAllowlistHook = context => context.DestinationUri.Host.EndsWith(".example.com", StringComparison.OrdinalIgnoreCase)
+    }
+};
+```
+
+`curl` also supports per-command allowlists with repeatable `--allowed-ref` flags.
+
 ## Capabilities Extension Pattern
 
 `ISandboxCapability` allows extension packages to configure `SandboxOptions` without adding dependencies to core:
