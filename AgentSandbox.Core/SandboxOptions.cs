@@ -102,6 +102,11 @@ public class SandboxOptions
     public ISecretBroker? SecretBroker { get; set; }
 
     /// <summary>
+    /// Optional secret policy model used to constrain command-level secret usage.
+    /// </summary>
+    public SecretResolutionPolicy? SecretPolicy { get; set; }
+
+    /// <summary>
     /// Metadata journal retention options.
     /// </summary>
     public SandboxOperationJournalOptions Journal { get; set; } = new();
@@ -143,6 +148,16 @@ public class SandboxOptions
                 HostCorrelationMetadata = new Dictionary<string, string>(Telemetry.HostCorrelationMetadata, StringComparer.Ordinal)
             },
         SecretBroker = SecretBroker,
+        SecretPolicy = SecretPolicy is null
+            ? null
+            : new SecretResolutionPolicy
+            {
+                AllowedRefs = SecretPolicy.AllowedRefs is null
+                    ? null
+                    : new HashSet<string>(SecretPolicy.AllowedRefs, StringComparer.Ordinal),
+                MaxSecretAge = SecretPolicy.MaxSecretAge,
+                EgressHostAllowlistHook = SecretPolicy.EgressHostAllowlistHook
+            },
         Journal = new SandboxOperationJournalOptions
         {
             MaxEntries = Journal.MaxEntries,

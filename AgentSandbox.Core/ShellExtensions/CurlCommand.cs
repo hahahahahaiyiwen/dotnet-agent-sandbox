@@ -2,6 +2,7 @@ using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using AgentSandbox.Core.Security;
 
 namespace AgentSandbox.Core.Shell.Extensions;
 
@@ -26,6 +27,7 @@ Options:
   -X, --request <method>   HTTP method (GET, POST, PUT, DELETE, PATCH)
   -H, --header <header>    Add header (use secretRef:<ref> in Authorization values)
   -d, --data <data>        Request body data
+  --allowed-ref <ref>      Restrict secretRef usage to explicitly allowed refs (repeatable)
   -o, --output <file>      Write output to file
   -s, --silent             Silent mode (no progress)
   -i, --include            Include response headers in output
@@ -215,6 +217,13 @@ Examples:
                         options.OutputFile = args[++i];
                     }
                     break;
+
+                case "--allowed-ref":
+                    if (i + 1 < args.Length)
+                    {
+                        options.AllowedRefs.Add(args[++i]);
+                    }
+                    break;
                     
                 case "-s":
                 case "--silent":
@@ -246,28 +255,60 @@ Examples:
 
     private static CurlOptions ResolveSecretReferences(CurlOptions options, IShellContext context, ISet<string> resolvedSecrets)
     {
-        options.Url = ResolveSecretRefs(options.Url, context, resolvedSecrets);
+        var baseAccessRequest = new SecretAccessRequest
+        {
+            AllowedRefs = options.AllowedRefs.Count > 0 ? options.AllowedRefs : null,
+            CommandName = "curl"
+        };
+
+        var unresolvedUrl = options.Url;
+        var resolvedUrl = ResolveSecretRefs(unresolvedUrl, context, resolvedSecrets, baseAccessRequest);
+
+        Uri? destinationUri = null;
+        if (Uri.TryCreate(resolvedUrl, UriKind.Absolute, out var parsedDestinationUri))
+        {
+            destinationUri = parsedDestinationUri;
+            resolvedUrl = ResolveSecretRefs(
+                unresolvedUrl,
+                context,
+                resolvedSecrets,
+                new SecretAccessRequest
+                {
+                    AllowedRefs = baseAccessRequest.AllowedRefs,
+                    DestinationUri = destinationUri,
+                    CommandName = baseAccessRequest.CommandName
+                });
+        }
+
+        options.Url = resolvedUrl;
+        var accessRequest = new SecretAccessRequest
+        {
+            AllowedRefs = baseAccessRequest.AllowedRefs,
+            DestinationUri = destinationUri,
+            CommandName = baseAccessRequest.CommandName
+        };
+
         if (!string.IsNullOrEmpty(options.Data))
         {
-            options.Data = ResolveSecretRefs(options.Data, context, resolvedSecrets);
+            options.Data = ResolveSecretRefs(options.Data, context, resolvedSecrets, accessRequest);
         }
 
         for (var i = 0; i < options.Headers.Count; i++)
         {
-            options.Headers[i] = ResolveSecretRefs(options.Headers[i], context, resolvedSecrets);
+            options.Headers[i] = ResolveSecretRefs(options.Headers[i], context, resolvedSecrets, accessRequest);
         }
 
         return options;
     }
 
-    private static string ResolveSecretRefs(string value, IShellContext context, ISet<string> resolvedSecrets)
+    private static string ResolveSecretRefs(string value, IShellContext context, ISet<string> resolvedSecrets, SecretAccessRequest accessRequest)
     {
         return SecretRefRegex.Replace(value, match =>
         {
             var secretRef = match.Groups[1].Value;
-            if (!context.TryResolveSecret(secretRef, out var secretValue))
+            if (!context.TryResolveSecret(secretRef, accessRequest, out var secretValue, out var errorMessage))
             {
-                throw new InvalidOperationException($"unknown secretRef '{secretRef}'");
+                throw new InvalidOperationException(errorMessage ?? $"unknown secretRef '{secretRef}'");
             }
 
             if (!string.IsNullOrEmpty(secretValue))
@@ -300,6 +341,7 @@ Examples:
         public List<string> Headers { get; } = new();
         public string? Data { get; set; }
         public string? OutputFile { get; set; }
+        public HashSet<string> AllowedRefs { get; } = new(StringComparer.Ordinal);
         public bool Silent { get; set; }
         public bool IncludeHeaders { get; set; }
         public bool FollowRedirects { get; set; }
