@@ -39,6 +39,14 @@ public interface IShellContext
     bool TryResolveSecret(string secretRef, SecretAccessRequest request, out string secretValue, out string? errorMessage);
 
     /// <summary>
+    /// Backward-compatible overload that resolves a secret without command-specific policy context.
+    /// </summary>
+    bool TryResolveSecret(string secretRef, out string secretValue)
+    {
+        return TryResolveSecret(secretRef, new SecretAccessRequest(), out secretValue, out _);
+    }
+
+    /// <summary>
     /// Gets or creates a cached value scoped to this session.
     /// Use for expensive objects like compiled regex patterns.
     /// Cache is cleared when the sandbox is disposed.

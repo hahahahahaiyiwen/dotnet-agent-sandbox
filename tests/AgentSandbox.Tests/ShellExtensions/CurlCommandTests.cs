@@ -194,6 +194,24 @@ public class CurlCommandTests
     }
 
     [Fact]
+    public void Curl_WithAllowedRef_ResolvesSecretInCommandAllowlist()
+    {
+        var handler = new MockHttpMessageHandler("OK", HttpStatusCode.OK);
+        var httpClient = new HttpClient(handler);
+        var broker = new TestSecretBroker(new Dictionary<string, string>
+        {
+            ["api-token"] = "super-secret-token"
+        });
+        var shell = new SandboxShell(_fs, broker);
+        shell.RegisterCommand(new CurlCommand(httpClient));
+
+        var result = shell.Execute("curl --allowed-ref api-token -H \"Authorization: Bearer secretRef:api-token\" http://example.com/api");
+
+        Assert.True(result.Success);
+        Assert.Equal("Bearer super-secret-token", handler.LastRequest?.Headers.GetValues("Authorization").First());
+    }
+
+    [Fact]
     public void Curl_WithSandboxPolicy_RejectsSecretRefOutsideAllowedRefs()
     {
         var handler = new MockHttpMessageHandler("OK", HttpStatusCode.OK);
@@ -212,6 +230,102 @@ public class CurlCommandTests
         shell.RegisterCommand(new CurlCommand(httpClient));
 
         var result = shell.Execute("curl -H \"Authorization: Bearer secretRef:api-token\" http://example.com/api");
+
+        Assert.False(result.Success);
+        Assert.Contains("not allowed by sandbox policy", result.Stderr);
+    }
+
+    [Fact]
+    public void Curl_WithSandboxPolicy_ResolvesSecretInsideAllowedRefs()
+    {
+        var handler = new MockHttpMessageHandler("OK", HttpStatusCode.OK);
+        var httpClient = new HttpClient(handler);
+        var broker = new TestSecretBroker(new Dictionary<string, string>
+        {
+            ["api-token"] = "super-secret-token"
+        });
+        var shell = new SandboxShell(
+            _fs,
+            broker,
+            new SecretResolutionPolicy
+            {
+                AllowedRefs = new HashSet<string>(StringComparer.Ordinal) { "api-token" }
+            });
+        shell.RegisterCommand(new CurlCommand(httpClient));
+
+        var result = shell.Execute("curl -H \"Authorization: Bearer secretRef:api-token\" http://example.com/api");
+
+        Assert.True(result.Success);
+        Assert.Equal("Bearer super-secret-token", handler.LastRequest?.Headers.GetValues("Authorization").First());
+    }
+
+    [Fact]
+    public void Curl_WithCommandAndSandboxAllowedRefs_ResolvesSecretOnlyWhenInBothAllowlists()
+    {
+        var handler = new MockHttpMessageHandler("OK", HttpStatusCode.OK);
+        var httpClient = new HttpClient(handler);
+        var broker = new TestSecretBroker(new Dictionary<string, string>
+        {
+            ["api-token"] = "super-secret-token"
+        });
+        var shell = new SandboxShell(
+            _fs,
+            broker,
+            new SecretResolutionPolicy
+            {
+                AllowedRefs = new HashSet<string>(StringComparer.Ordinal) { "api-token" }
+            });
+        shell.RegisterCommand(new CurlCommand(httpClient));
+
+        var result = shell.Execute("curl --allowed-ref api-token -H \"Authorization: Bearer secretRef:api-token\" http://example.com/api");
+
+        Assert.True(result.Success);
+        Assert.Equal("Bearer super-secret-token", handler.LastRequest?.Headers.GetValues("Authorization").First());
+    }
+
+    [Fact]
+    public void Curl_WithCommandAndSandboxAllowedRefs_SecretOnlyInSandbox_IsRejectedByCommandPolicy()
+    {
+        var handler = new MockHttpMessageHandler("OK", HttpStatusCode.OK);
+        var httpClient = new HttpClient(handler);
+        var broker = new TestSecretBroker(new Dictionary<string, string>
+        {
+            ["api-token"] = "super-secret-token"
+        });
+        var shell = new SandboxShell(
+            _fs,
+            broker,
+            new SecretResolutionPolicy
+            {
+                AllowedRefs = new HashSet<string>(StringComparer.Ordinal) { "api-token" }
+            });
+        shell.RegisterCommand(new CurlCommand(httpClient));
+
+        var result = shell.Execute("curl --allowed-ref other-token -H \"Authorization: Bearer secretRef:api-token\" http://example.com/api");
+
+        Assert.False(result.Success);
+        Assert.Contains("not allowed by command policy", result.Stderr);
+    }
+
+    [Fact]
+    public void Curl_WithCommandAndSandboxAllowedRefs_SecretOnlyInCommand_IsRejectedBySandboxPolicy()
+    {
+        var handler = new MockHttpMessageHandler("OK", HttpStatusCode.OK);
+        var httpClient = new HttpClient(handler);
+        var broker = new TestSecretBroker(new Dictionary<string, string>
+        {
+            ["api-token"] = "super-secret-token"
+        });
+        var shell = new SandboxShell(
+            _fs,
+            broker,
+            new SecretResolutionPolicy
+            {
+                AllowedRefs = new HashSet<string>(StringComparer.Ordinal) { "other-token" }
+            });
+        shell.RegisterCommand(new CurlCommand(httpClient));
+
+        var result = shell.Execute("curl --allowed-ref api-token -H \"Authorization: Bearer secretRef:api-token\" http://example.com/api");
 
         Assert.False(result.Success);
         Assert.Contains("not allowed by sandbox policy", result.Stderr);
@@ -242,6 +356,30 @@ public class CurlCommandTests
     }
 
     [Fact]
+    public void Curl_WithSandboxPolicy_AllowsSecretRefWithinMaxAge()
+    {
+        var handler = new MockHttpMessageHandler("OK", HttpStatusCode.OK);
+        var httpClient = new HttpClient(handler);
+        var broker = new TestSecretBroker(new Dictionary<string, ResolvedSecret>
+        {
+            ["api-token"] = new("super-secret-token", DateTimeOffset.UtcNow - TimeSpan.FromMinutes(1))
+        });
+        var shell = new SandboxShell(
+            _fs,
+            broker,
+            new SecretResolutionPolicy
+            {
+                MaxSecretAge = TimeSpan.FromMinutes(5)
+            });
+        shell.RegisterCommand(new CurlCommand(httpClient));
+
+        var result = shell.Execute("curl -H \"Authorization: Bearer secretRef:api-token\" http://example.com/api");
+
+        Assert.True(result.Success);
+        Assert.Equal("Bearer super-secret-token", handler.LastRequest?.Headers.GetValues("Authorization").First());
+    }
+
+    [Fact]
     public void Curl_WithSandboxPolicy_RejectsEgressHostDeniedByHook()
     {
         var handler = new MockHttpMessageHandler("OK", HttpStatusCode.OK);
@@ -262,7 +400,54 @@ public class CurlCommandTests
         var result = shell.Execute("curl -H \"Authorization: Bearer secretRef:api-token\" http://example.com/api");
 
         Assert.False(result.Success);
-        Assert.Contains("egress host 'example.com' is not allowed", result.Stderr);
+        Assert.Contains("egress host 'example.com' is not allowed for secretRef 'api-token'", result.Stderr);
+    }
+
+    [Fact]
+    public void Curl_WithSandboxPolicy_AllowsEgressHostAllowedByHook()
+    {
+        var handler = new MockHttpMessageHandler("OK", HttpStatusCode.OK);
+        var httpClient = new HttpClient(handler);
+        var broker = new TestSecretBroker(new Dictionary<string, string>
+        {
+            ["api-token"] = "super-secret-token"
+        });
+        var shell = new SandboxShell(
+            _fs,
+            broker,
+            new SecretResolutionPolicy
+            {
+                EgressHostAllowlistHook = context => context.DestinationUri.Host == "allowed.example.com"
+            });
+        shell.RegisterCommand(new CurlCommand(httpClient));
+
+        var result = shell.Execute("curl -H \"Authorization: Bearer secretRef:api-token\" http://allowed.example.com/api");
+
+        Assert.True(result.Success);
+    }
+
+    [Fact]
+    public void Curl_WithUrlSecretRef_StillAppliesEgressPolicyAfterUrlResolution()
+    {
+        var handler = new MockHttpMessageHandler("OK", HttpStatusCode.OK);
+        var httpClient = new HttpClient(handler);
+        var broker = new TestSecretBroker(new Dictionary<string, string>
+        {
+            ["api-url"] = "http://blocked.example.com/api"
+        });
+        var shell = new SandboxShell(
+            _fs,
+            broker,
+            new SecretResolutionPolicy
+            {
+                EgressHostAllowlistHook = context => context.DestinationUri.Host == "allowed.example.com"
+            });
+        shell.RegisterCommand(new CurlCommand(httpClient));
+
+        var result = shell.Execute("curl secretRef:api-url");
+
+        Assert.False(result.Success);
+        Assert.Contains("egress host 'blocked.example.com' is not allowed for secretRef 'api-url'", result.Stderr);
     }
 
     #endregion

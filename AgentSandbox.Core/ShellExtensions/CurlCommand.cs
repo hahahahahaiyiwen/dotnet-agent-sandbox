@@ -255,15 +255,39 @@ Examples:
 
     private static CurlOptions ResolveSecretReferences(CurlOptions options, IShellContext context, ISet<string> resolvedSecrets)
     {
-        Uri.TryCreate(options.Url, UriKind.Absolute, out var destinationUri);
-        var accessRequest = new SecretAccessRequest
+        var baseAccessRequest = new SecretAccessRequest
         {
             AllowedRefs = options.AllowedRefs.Count > 0 ? options.AllowedRefs : null,
-            DestinationUri = destinationUri,
             CommandName = "curl"
         };
 
-        options.Url = ResolveSecretRefs(options.Url, context, resolvedSecrets, accessRequest);
+        var unresolvedUrl = options.Url;
+        var resolvedUrl = ResolveSecretRefs(unresolvedUrl, context, resolvedSecrets, baseAccessRequest);
+
+        Uri? destinationUri = null;
+        if (Uri.TryCreate(resolvedUrl, UriKind.Absolute, out var parsedDestinationUri))
+        {
+            destinationUri = parsedDestinationUri;
+            resolvedUrl = ResolveSecretRefs(
+                unresolvedUrl,
+                context,
+                resolvedSecrets,
+                new SecretAccessRequest
+                {
+                    AllowedRefs = baseAccessRequest.AllowedRefs,
+                    DestinationUri = destinationUri,
+                    CommandName = baseAccessRequest.CommandName
+                });
+        }
+
+        options.Url = resolvedUrl;
+        var accessRequest = new SecretAccessRequest
+        {
+            AllowedRefs = baseAccessRequest.AllowedRefs,
+            DestinationUri = destinationUri,
+            CommandName = baseAccessRequest.CommandName
+        };
+
         if (!string.IsNullOrEmpty(options.Data))
         {
             options.Data = ResolveSecretRefs(options.Data, context, resolvedSecrets, accessRequest);
