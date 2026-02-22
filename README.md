@@ -60,15 +60,6 @@ Agent > Print out the content of /project/plan.txt.
 Agent > exit
 ```
 
-### Run the API Server
-
-```bash
-cd AgentSandbox
-dotnet run --project AgentSandbox.Api
-```
-
-Navigate to `http://localhost:5000/swagger` to explore the API.
-
 ### Use as a Library
 
 ```bash
@@ -582,9 +573,6 @@ AgentSandbox/
 ├── samples/
 │   ├── InteractiveSandbox/             # Interactive console app
 │   └── InteractiveAgent/               # Interactive agent chat
-├── AgentSandbox.Api/                   # REST API server
-│   ├── Endpoints/
-│   └── Program.cs
 └── tests/
     ├── AgentSandbox.Tests/             # Unit tests
     └── AgentSandbox.Benchmarks/        # Performance benchmarks
