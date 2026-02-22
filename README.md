@@ -60,15 +60,6 @@ Agent > Print out the content of /project/plan.txt.
 Agent > exit
 ```
 
-### Run the API Server
-
-```bash
-cd AgentSandbox
-dotnet run --project AgentSandbox.Api
-```
-
-Navigate to `http://localhost:5000/swagger` to explore the API.
-
 ### Use as a Library
 
 ```bash
@@ -314,53 +305,6 @@ sandbox.Execute("mkdir project");
 sandbox.Execute("echo 'Hello' > project/readme.txt");
 ```
 
-## API Endpoints
-
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| POST | `/api/sandbox` | Create new sandbox |
-| GET | `/api/sandbox` | List all sandboxes |
-| GET | `/api/sandbox/{id}` | Get sandbox info |
-| DELETE | `/api/sandbox/{id}` | Destroy sandbox |
-| POST | `/api/sandbox/{id}/exec` | Execute command |
-| GET | `/api/sandbox/{id}/history` | Get command history |
-| GET | `/api/sandbox/{id}/fs?path=` | Read file |
-| PUT | `/api/sandbox/{id}/fs` | Write file |
-| GET | `/api/sandbox/{id}/ls?path=` | List directory |
-| POST | `/api/sandbox/{id}/snapshot` | Create snapshot (includes schema-versioned metadata fields) |
-| POST | `/api/sandbox/{id}/restore?snapshotId=` | Restore snapshot to a new sandbox instance (returns new sandbox ID + snapshot metadata) |
-| GET | `/api/sandbox/{id}/stats` | Get statistics |
-
-`POST /api/sandbox/{id}/restore` response fields:
-- `restored`, `snapshotId`, `sandboxId`
-- `snapshotCreatedAt`, `snapshotSchemaVersion`, `snapshotSize`, `snapshotFileCount`
-- `snapshotSourceSandboxId`, `snapshotSourceSessionId`
-
-### Example: Create and Use Sandbox via API
-
-```bash
-# Create a sandbox
-curl -X POST http://localhost:5000/api/sandbox \
-  -H "Content-Type: application/json" \
-  -d '{"id": "agent-1", "workingDirectory": "/workspace"}'
-
-# Execute a command
-curl -X POST http://localhost:5000/api/sandbox/agent-1/exec \
-  -H "Content-Type: application/json" \
-  -d '{"command": "echo Hello World"}'
-
-# Write a file
-curl -X PUT http://localhost:5000/api/sandbox/agent-1/fs \
-  -H "Content-Type: application/json" \
-  -d '{"path": "/workspace/test.txt", "content": "file content"}'
-
-# Read a file
-curl "http://localhost:5000/api/sandbox/agent-1/fs?path=/workspace/test.txt"
-
-# List directory
-curl "http://localhost:5000/api/sandbox/agent-1/ls?path=/workspace"
-```
-
 ## Supported Shell Commands
 
 ### Built-in Commands
@@ -582,9 +526,6 @@ AgentSandbox/
 ├── samples/
 │   ├── InteractiveSandbox/             # Interactive console app
 │   └── InteractiveAgent/               # Interactive agent chat
-├── AgentSandbox.Api/                   # REST API server
-│   ├── Endpoints/
-│   └── Program.cs
 └── tests/
     ├── AgentSandbox.Tests/             # Unit tests
     └── AgentSandbox.Benchmarks/        # Performance benchmarks
