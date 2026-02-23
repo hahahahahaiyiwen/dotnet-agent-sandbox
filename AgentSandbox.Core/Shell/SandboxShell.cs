@@ -493,7 +493,6 @@ public class SandboxShell : IShellContext, ISandboxShellHost
                     _fs.WriteFile(path, result.Stdout);
                 }
                 result = ShellResult.Ok();
-                stderrForAggregation = result.Stderr;
             }
             catch (Exception ex)
             {

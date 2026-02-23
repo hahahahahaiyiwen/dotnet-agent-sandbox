@@ -272,12 +272,32 @@ public class SandboxShellTests
     }
 
     [Fact]
+    public void CommandChaining_AndAnd_FirstCommandFails_SkipsSubsequent()
+    {
+        var result = _shell.Execute("missing_command && echo never");
+
+        Assert.False(result.Success);
+        Assert.Contains("missing_command: command not found", result.Stderr);
+        Assert.Equal(string.Empty, result.Stdout);
+    }
+
+    [Fact]
     public void CommandChaining_RedirectedSegment_PreservesAggregatedStdout()
     {
         var result = _shell.Execute("echo one && echo two > /out.txt && cat /out.txt");
 
         Assert.True(result.Success);
         Assert.Equal("one\ntwo\ntwo", result.Stdout);
+    }
+
+    [Fact]
+    public void CommandChaining_RedirectedSegment_PreservesStderrAggregation()
+    {
+        var result = _shell.Execute("echo one && cat /missing > /out.txt && echo two");
+
+        Assert.False(result.Success);
+        Assert.Equal("one", result.Stdout);
+        Assert.Contains("No such file", result.Stderr);
     }
 
     [Fact]
@@ -289,6 +309,47 @@ public class SandboxShellTests
 
         Assert.True(result.Success);
         Assert.Equal("line1\nline2", result.Stdout);
+    }
+
+    [Fact]
+    public void CommandSeparator_Semicolon_MiddleFailure_FinalExitCodeFromLastCommand()
+    {
+        var result = _shell.Execute("echo a; missing_command; echo b");
+
+        Assert.True(result.Success);
+        Assert.Equal(0, result.ExitCode);
+        Assert.Equal("a\nb", result.Stdout);
+        Assert.Contains("missing_command: command not found", result.Stderr);
+    }
+
+    [Fact]
+    public void CommandChaining_TrailingOperator_ReturnsSyntaxError()
+    {
+        var result = _shell.Execute("echo a &&");
+
+        Assert.False(result.Success);
+        Assert.Equal(string.Empty, result.Stdout);
+        Assert.Contains("syntax error: missing command near", result.Stderr);
+    }
+
+    [Fact]
+    public void CommandChaining_LeadingOperator_ReturnsSyntaxError()
+    {
+        var result = _shell.Execute("&& echo a");
+
+        Assert.False(result.Success);
+        Assert.Equal(string.Empty, result.Stdout);
+        Assert.Contains("syntax error: missing command near", result.Stderr);
+    }
+
+    [Fact]
+    public void CommandChaining_ConsecutiveOperators_ReturnsSyntaxError()
+    {
+        var result = _shell.Execute("echo a && && echo b");
+
+        Assert.False(result.Success);
+        Assert.Equal(string.Empty, result.Stdout);
+        Assert.Contains("syntax error: missing command near", result.Stderr);
     }
 
     [Fact]
