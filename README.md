@@ -342,7 +342,8 @@ sandbox.Execute("echo 'Hello' > project/readme.txt");
 | Environment variables | ✅ | `$VAR`, `$HOME`, `$PWD` |
 | Glob patterns | ✅ | `*.txt`, `src/*.js` |
 | Shell scripts | ✅ | `sh script.sh` or `./script.sh` |
-| Command chaining (`&&`, `\|\|`, `;`) | ❌ | Returns explicit errors; run commands separately or use scripts |
+| Command chaining (`&&`, `;`) | ✅ | Left-to-right execution; `&&` short-circuits on failure |
+| Command chaining (`\|\|`) | ❌ | Returns explicit error; run fallback commands separately or use scripts |
 | Pipelines (`\|`) | ❌ | Use file arguments instead |
 | Input redirection (`<`, `<<`) | ❌ | Pass files as arguments |
 | Background jobs (`&`) | ❌ | Returns an error if used |
@@ -541,7 +542,7 @@ dotnet test
 ## Documentation Consistency Checklist
 
 - Keep public file-read API examples on `ReadFileLines(path, startLine?, endLine?)`.
-- Keep shell constraint docs aligned with implemented parser behavior (no `|`, chaining, `<`/`<<`, or `&` jobs).
+- Keep shell constraint docs aligned with implemented parser behavior (no `|`, `||`, `<`/`<<`, or `&` jobs).
 - Keep snapshot docs aligned with schema-versioned metadata and restore response fields.
 - Keep the single-active-executor-per-sandbox invariant explicit in public integration docs.
 

@@ -25,7 +25,7 @@ A lightweight, in-memory virtual filesystem and shell for AI agents. Zero extern
 - Snapshot captures filesystem, working directory, and environment.
 
 ## Non-goals / Constraints
-- Shell intentionally does not support pipes, command chaining (`&&`, `||`, `;`), or stdin redirection.
+- Shell intentionally does not support pipes, command chaining (`||`), or stdin redirection.
 - Sandbox internals are single-threaded by design; concurrency is handled by separate sandbox instances at orchestration level.
 
 ## Integration Invariant: Single Active Executor per Sandbox
@@ -195,7 +195,7 @@ sandbox.Execute("sh /skills/python-dev/scripts/setup.sh");
 
 **Not Supported:**
 - Pipelines (`|`) - use file arguments instead: `grep pattern file.txt`
-- Command chaining (`&&`, `||`, `;`) - run commands separately or use scripts
+- Command chaining with `||` - run fallback commands separately or use scripts
 - Input redirection (`<`, `<<`) - pass files as arguments
 - Background jobs (`&`) - returns an error if used
 - Command substitution (`` `cmd` `` or `$(cmd)`) - returns an error if used

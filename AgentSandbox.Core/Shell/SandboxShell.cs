@@ -172,171 +172,69 @@ public class SandboxShell : IShellContext, ISandboxShellHost
         if (tokens.Count == 0)
             return ShellResult.Ok();
 
-        string? redirectFile = null;
-        bool appendMode = false;
-        var parts = new List<string>();
-        var wasQuoted = new List<bool>();
-
+        var segments = new List<(List<ShellToken> Tokens, string? Condition)>();
+        var currentSegment = new List<ShellToken>();
+        string? nextCondition = null;
         for (int i = 0; i < tokens.Count; i++)
         {
             var token = tokens[i];
-            if (token.Kind == ShellTokenKind.Operator)
+            if (token.Kind == ShellTokenKind.Operator &&
+                (token.Value == ";" || token.Value == "&&"))
             {
-                switch (token.Value)
+                if (currentSegment.Count == 0)
                 {
-                    case ">>":
-                    case ">":
-                        if (i == 0 || i + 1 >= tokens.Count || tokens[i + 1].Kind != ShellTokenKind.Word)
-                        {
-                            return ShellResult.Error("redirect: missing file operand");
-                        }
-
-                        appendMode = token.Value == ">>";
-                        redirectFile = tokens[i + 1].Value;
-                        i++;
-                        break;
+                    return ShellResult.Error($"syntax error: missing command near '{token.Value}'");
                 }
 
+                segments.Add((new List<ShellToken>(currentSegment), nextCondition));
+                currentSegment.Clear();
+                nextCondition = token.Value;
                 continue;
             }
 
-            parts.Add(ExpandVariables(token.Value));
-            wasQuoted.Add(token.WasQuoted);
+            currentSegment.Add(token);
         }
 
-        if (parts.Count == 0)
-            return ShellResult.Ok();
-
-        var cmd = parts[0];
-        var cmdLower = cmd.ToLowerInvariant();
-        
-        // Expand globs in arguments (skip command name, skip quoted args)
-        var args = ExpandGlobs(parts.Skip(1).ToArray(), wasQuoted.Skip(1).ToArray());
-
-        ShellResult result;
-        
-        // Check if it's a direct script execution (./script.sh or /path/to/script.sh)
-        if ((cmd.StartsWith("./") || cmd.StartsWith("/")) && cmd.EndsWith(".sh"))
+        if (currentSegment.Count == 0)
         {
-            try
-            {
-                result = ExecuteShCommand(new[] { cmd }.Concat(args).ToArray());
-            }
-            catch (Exception ex)
-            {
-                result = ShellResult.Error($"{cmd}: {ex.Message}");
-            }
-        }
-        // Handle 'sh' command specially (needs to call Execute recursively)
-        else if (cmdLower == "sh")
-        {
-            try
-            {
-                if (args.Length > 0 && args[0] == "-h")
-                {
-                    result = ShellResult.Ok("sh - Execute shell script\n\nUsage: sh <script.sh> [args...]");
-                }
-                else
-                {
-                    result = ExecuteShCommand(args);
-                }
-            }
-            catch (Exception ex)
-            {
-                result = ShellResult.Error($"sh: {ex.Message}");
-            }
-        }
-        // Handle 'help' command specially (needs access to extension commands)
-        else if (cmdLower == "help")
-        {
-            if (args.Length > 0 && args[0] == "-h")
-            {
-                result = ShellResult.Ok("help - Show available commands\n\nUsage: help");
-            }
-            else
-            {
-                result = ExecuteHelpCommand();
-            }
-        }
-        // Handle 'which' command specially (needs access to command registries)
-        else if (cmdLower == "which")
-        {
-            if (args.Length > 0 && args[0] == "-h")
-            {
-                result = ShellResult.Ok("which - Locate a command\n\nUsage: which <command>");
-            }
-            else
-            {
-                result = ExecuteWhichCommand(args);
-            }
-        }
-        // Check built-in commands first
-        else if (_builtinCommands.TryGetValue(cmdLower, out var command))
-        {
-            try
-            {
-                if (args.Length > 0 && args[0] == "-h")
-                {
-                    result = ShellResult.Ok($"{command.Name} - {command.Description}\n\nUsage: {command.Usage}");
-                }
-                else
-                {
-                    result = command.Execute(args, this);
-                }
-            }
-            catch (Exception ex)
-            {
-                result = ShellResult.Error($"{cmdLower}: {ex.Message}");
-            }
-        }
-        // Then check extension commands
-        else if (_extensionCommands.TryGetValue(cmdLower, out var extCommand))
-        {
-            try
-            {
-                result = extCommand.Execute(args, this);
-            }
-            catch (Exception ex)
-            {
-                result = ShellResult.Error($"{cmdLower}: {ex.Message}");
-            }
-        }
-        else
-        {
-            result = ShellResult.Error(
-                $"{cmdLower}: command not found.\n" +
-                "Use 'help' to list available commands.",
-                127);
+            return ShellResult.Error($"syntax error: missing command near '{nextCondition}'");
         }
 
-        // Handle output redirection
-        if (redirectFile != null && result.Success && !string.IsNullOrEmpty(result.Stdout))
+        segments.Add((new List<ShellToken>(currentSegment), nextCondition));
+
+        var aggregateStdout = new StringBuilder();
+        var aggregateStderr = new StringBuilder();
+        var lastExecuted = ShellResult.Ok();
+        var hasExecuted = false;
+
+        foreach (var segment in segments)
         {
-            try
+            if (segment.Condition == "&&" && hasExecuted && lastExecuted.ExitCode != 0)
             {
-                var path = ResolvePath(redirectFile);
-                if (appendMode)
-                {
-                    // Append mode: read existing content and append new content
-                    var existingBytes = _fs.Exists(path) ? _fs.ReadFileBytes(path) : null;
-                    var existing = existingBytes != null ? Encoding.UTF8.GetString(existingBytes) : string.Empty;
-                    _fs.WriteFile(path, existing + result.Stdout);
-                }
-                else
-                {
-                    _fs.WriteFile(path, result.Stdout);
-                }
-                result = ShellResult.Ok();
+                continue;
             }
-            catch (Exception ex)
+
+            var execution = ExecuteSingleCommand(segment.Tokens);
+            var result = execution.Result;
+            hasExecuted = true;
+            lastExecuted = result;
+
+            if (!string.IsNullOrEmpty(execution.StdoutForAggregation))
             {
-                result = ShellResult.Error($"redirect: {ex.Message}");
+                AppendAggregate(aggregateStdout, execution.StdoutForAggregation);
+            }
+
+            if (!string.IsNullOrEmpty(execution.StderrForAggregation))
+            {
+                AppendAggregate(aggregateStderr, execution.StderrForAggregation);
             }
         }
 
-        result.Command = commandLine;
-        result.Duration = sw.Elapsed;
-        return result;
+        lastExecuted.Stdout = aggregateStdout.ToString();
+        lastExecuted.Stderr = aggregateStderr.ToString();
+        lastExecuted.Command = commandLine;
+        lastExecuted.Duration = sw.Elapsed;
+        return lastExecuted;
     }
 
     /// <summary>
@@ -426,6 +324,186 @@ public class SandboxShell : IShellContext, ISandboxShellHost
         }
 
         return redacted;
+    }
+
+    private static void AppendAggregate(StringBuilder aggregate, string value)
+    {
+        if (aggregate.Length > 0)
+        {
+            var last = aggregate[aggregate.Length - 1];
+            if (last != '\n' && last != '\r')
+            {
+                aggregate.Append('\n');
+            }
+        }
+
+        aggregate.Append(value);
+    }
+
+    private (ShellResult Result, string StdoutForAggregation, string StderrForAggregation) ExecuteSingleCommand(List<ShellToken> tokens)
+    {
+        string? redirectFile = null;
+        bool appendMode = false;
+        var parts = new List<string>();
+        var wasQuoted = new List<bool>();
+
+        for (int i = 0; i < tokens.Count; i++)
+        {
+            var token = tokens[i];
+            if (token.Kind == ShellTokenKind.Operator)
+            {
+                switch (token.Value)
+                {
+                    case ">>":
+                    case ">":
+                        if (i == 0 || i + 1 >= tokens.Count || tokens[i + 1].Kind != ShellTokenKind.Word)
+                        {
+                            var error = ShellResult.Error("redirect: missing file operand");
+                            return (error, error.Stdout, error.Stderr);
+                        }
+
+                        appendMode = token.Value == ">>";
+                        redirectFile = tokens[i + 1].Value;
+                        i++;
+                        break;
+                }
+
+                continue;
+            }
+
+            parts.Add(ExpandVariables(token.Value));
+            wasQuoted.Add(token.WasQuoted);
+        }
+
+        if (parts.Count == 0)
+        {
+            var ok = ShellResult.Ok();
+            return (ok, ok.Stdout, ok.Stderr);
+        }
+
+        var cmd = parts[0];
+        var cmdLower = cmd.ToLowerInvariant();
+        
+        var args = ExpandGlobs(parts.Skip(1).ToArray(), wasQuoted.Skip(1).ToArray());
+
+        ShellResult result;
+        if ((cmd.StartsWith("./") || cmd.StartsWith("/")) && cmd.EndsWith(".sh"))
+        {
+            try
+            {
+                result = ExecuteShCommand(new[] { cmd }.Concat(args).ToArray());
+            }
+            catch (Exception ex)
+            {
+                result = ShellResult.Error($"{cmd}: {ex.Message}");
+            }
+        }
+        else if (cmdLower == "sh")
+        {
+            try
+            {
+                if (args.Length > 0 && args[0] == "-h")
+                {
+                    result = ShellResult.Ok("sh - Execute shell script\n\nUsage: sh <script.sh> [args...]");
+                }
+                else
+                {
+                    result = ExecuteShCommand(args);
+                }
+            }
+            catch (Exception ex)
+            {
+                result = ShellResult.Error($"sh: {ex.Message}");
+            }
+        }
+        else if (cmdLower == "help")
+        {
+            if (args.Length > 0 && args[0] == "-h")
+            {
+                result = ShellResult.Ok("help - Show available commands\n\nUsage: help");
+            }
+            else
+            {
+                result = ExecuteHelpCommand();
+            }
+        }
+        else if (cmdLower == "which")
+        {
+            if (args.Length > 0 && args[0] == "-h")
+            {
+                result = ShellResult.Ok("which - Locate a command\n\nUsage: which <command>");
+            }
+            else
+            {
+                result = ExecuteWhichCommand(args);
+            }
+        }
+        else if (_builtinCommands.TryGetValue(cmdLower, out var command))
+        {
+            try
+            {
+                if (args.Length > 0 && args[0] == "-h")
+                {
+                    result = ShellResult.Ok($"{command.Name} - {command.Description}\n\nUsage: {command.Usage}");
+                }
+                else
+                {
+                    result = command.Execute(args, this);
+                }
+            }
+            catch (Exception ex)
+            {
+                result = ShellResult.Error($"{cmdLower}: {ex.Message}");
+            }
+        }
+        else if (_extensionCommands.TryGetValue(cmdLower, out var extCommand))
+        {
+            try
+            {
+                result = extCommand.Execute(args, this);
+            }
+            catch (Exception ex)
+            {
+                result = ShellResult.Error($"{cmdLower}: {ex.Message}");
+            }
+        }
+        else
+        {
+            result = ShellResult.Error(
+                $"{cmdLower}: command not found.\n" +
+                "Use 'help' to list available commands.",
+                127);
+        }
+
+        var stdoutForAggregation = result.Stdout;
+        var stderrForAggregation = result.Stderr;
+        if (redirectFile != null && result.Success && !string.IsNullOrEmpty(result.Stdout))
+        {
+            try
+            {
+                var path = ResolvePath(redirectFile);
+                if (appendMode)
+                {
+                    var existingBytes = _fs.Exists(path) ? _fs.ReadFileBytes(path) : null;
+                    var existing = existingBytes != null ? Encoding.UTF8.GetString(existingBytes) : string.Empty;
+                    _fs.WriteFile(path, existing + result.Stdout);
+                }
+                else
+                {
+                    _fs.WriteFile(path, result.Stdout);
+                }
+                result = ShellResult.Ok();
+                stderrForAggregation = result.Stderr;
+            }
+            catch (Exception ex)
+            {
+                result = ShellResult.Error($"redirect: {ex.Message}");
+                stdoutForAggregation = result.Stdout;
+                stderrForAggregation = result.Stderr;
+            }
+        }
+
+        return (result, stdoutForAggregation, stderrForAggregation);
     }
 
     #region Private Methods - Command Parsing
