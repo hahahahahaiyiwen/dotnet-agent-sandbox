@@ -325,21 +325,33 @@ public class SandboxShellTests
     [Fact]
     public void CommandChaining_TrailingOperator_ReturnsSyntaxError()
     {
-        var result = _shell.Execute("echo a &&");
+        var resultAnd = _shell.Execute("echo a &&");
 
-        Assert.False(result.Success);
-        Assert.Equal(string.Empty, result.Stdout);
-        Assert.Contains("syntax error: missing command near", result.Stderr);
+        Assert.False(resultAnd.Success);
+        Assert.Equal(string.Empty, resultAnd.Stdout);
+        Assert.Contains("syntax error: missing command near", resultAnd.Stderr);
+
+        var resultSemicolon = _shell.Execute("echo a ;");
+
+        Assert.False(resultSemicolon.Success);
+        Assert.Equal(string.Empty, resultSemicolon.Stdout);
+        Assert.Contains("syntax error: missing command near", resultSemicolon.Stderr);
     }
 
     [Fact]
     public void CommandChaining_LeadingOperator_ReturnsSyntaxError()
     {
-        var result = _shell.Execute("&& echo a");
+        var resultAnd = _shell.Execute("&& echo a");
 
-        Assert.False(result.Success);
-        Assert.Equal(string.Empty, result.Stdout);
-        Assert.Contains("syntax error: missing command near", result.Stderr);
+        Assert.False(resultAnd.Success);
+        Assert.Equal(string.Empty, resultAnd.Stdout);
+        Assert.Contains("syntax error: missing command near", resultAnd.Stderr);
+
+        var resultSemicolon = _shell.Execute("; echo a");
+
+        Assert.False(resultSemicolon.Success);
+        Assert.Equal(string.Empty, resultSemicolon.Stdout);
+        Assert.Contains("syntax error: missing command near", resultSemicolon.Stderr);
     }
 
     [Fact]
