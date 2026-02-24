@@ -270,6 +270,33 @@ public class CurlCommandTests
     }
 
     [Fact]
+    public void ShellContext_TryResolveSecretReferences_DoesNotMutateResolvedSecretsOnFailure()
+    {
+        var broker = new TestSecretBroker(new Dictionary<string, string>
+        {
+            ["api-token"] = "super-secret-token",
+            ["empty-token"] = string.Empty
+        });
+        var shell = new SandboxShell(_fs, broker);
+        var context = (IShellContext)shell;
+        var resolvedSecrets = new HashSet<string>(StringComparer.Ordinal);
+
+        var success = context.TryResolveSecretReferences(
+            "Authorization: Bearer secretRef:api-token; fallback=secretRef:empty-token",
+            new SecretAccessRequest
+            {
+                CommandName = "custom-http"
+            },
+            resolvedSecrets,
+            out _,
+            out var errorMessage);
+
+        Assert.False(success);
+        Assert.Contains("resolved to an empty value", errorMessage);
+        Assert.Empty(resolvedSecrets);
+    }
+
+    [Fact]
     public void Curl_WithSandboxPolicy_RejectsSecretRefOutsideAllowedRefs()
     {
         var handler = new MockHttpMessageHandler("OK", HttpStatusCode.OK);

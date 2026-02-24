@@ -50,6 +50,11 @@ public interface IShellContext
     /// Resolves all <c>secretRef:&lt;ref&gt;</c> tokens in a value through the centralized policy-enforced secret resolution path.
     /// Returns false when any referenced secret is denied or cannot be resolved.
     /// </summary>
+    /// <remarks>
+    /// Resolved output and any collected resolved secrets are sensitive and must not be logged or persisted.
+    /// Destination-aware egress policy evaluation requires <see cref="SecretAccessRequest.DestinationUri"/> and should include
+    /// <see cref="SecretAccessRequest.CommandName"/> for command-aware policy checks.
+    /// </remarks>
     bool TryResolveSecretReferences(
         string value,
         SecretAccessRequest request,

@@ -99,7 +99,7 @@ public class SandboxShell : IShellContext, ISandboxShellHost
         secretValue = resolvedSecret.Value;
         if (string.IsNullOrEmpty(secretValue))
         {
-            errorMessage = null;
+            errorMessage = $"secretRef '{secretRef}' resolved to an empty value";
             return false;
         }
 
@@ -123,32 +123,43 @@ public class SandboxShell : IShellContext, ISandboxShellHost
             return true;
         }
 
-        string? resolutionError = null;
-        var resolved = SecretRefRegex.Replace(value, match =>
+        var matches = SecretRefRegex.Matches(value);
+        if (matches.Count == 0)
         {
+            resolvedValue = value;
+            errorMessage = null;
+            return true;
+        }
+
+        var output = new StringBuilder(value.Length);
+        var bufferedResolvedSecrets = resolvedSecrets != null ? new HashSet<string>(StringComparer.Ordinal) : null;
+        var lastIndex = 0;
+        foreach (Match match in matches)
+        {
+            output.Append(value, lastIndex, match.Index - lastIndex);
             var secretRef = match.Groups[1].Value;
             if (!((IShellContext)this).TryResolveSecret(secretRef, request, out var secretValue, out var innerError))
             {
-                resolutionError = innerError ?? $"unknown secretRef '{secretRef}'";
-                return match.Value;
+                resolvedValue = string.Empty;
+                errorMessage = innerError ?? $"secretRef '{secretRef}' could not be resolved";
+                return false;
             }
 
-            if (!string.IsNullOrEmpty(secretValue))
-            {
-                resolvedSecrets?.Add(secretValue);
-            }
-
-            return secretValue;
-        });
-
-        if (resolutionError != null)
-        {
-            resolvedValue = string.Empty;
-            errorMessage = resolutionError;
-            return false;
+            output.Append(secretValue);
+            bufferedResolvedSecrets?.Add(secretValue);
+            lastIndex = match.Index + match.Length;
         }
 
-        resolvedValue = resolved;
+        output.Append(value, lastIndex, value.Length - lastIndex);
+        if (bufferedResolvedSecrets != null)
+        {
+            foreach (var secret in bufferedResolvedSecrets)
+            {
+                resolvedSecrets!.Add(secret);
+            }
+        }
+
+        resolvedValue = output.ToString();
         errorMessage = null;
         return true;
     }
