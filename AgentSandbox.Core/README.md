@@ -108,7 +108,7 @@ For custom shell extensions, always resolve `secretRef:<ref>` placeholders via `
 ```csharp
 using AgentSandbox.Core;
 using AgentSandbox.Extensions;
-using AgentSandbox.Core.ShellExtensions;
+using AgentSandbox.Core.Shell.Extensions;
 
 var options = new SandboxOptions
 {

@@ -65,6 +65,77 @@ public class ExtensionsFunctionTests
                 default));
     }
 
+    [Fact]
+    public async Task GetWriteFileFunction_ReturnsStructuredSuccessResult()
+    {
+        using var sandbox = new Sandbox();
+        var function = sandbox.GetWriteFileFunction();
+
+        var result = await function.InvokeAsync(
+            new AIFunctionArguments(new Dictionary<string, object?> { ["path"] = "/created.txt", ["content"] = "abc" }),
+            default);
+
+        var response = DeserializeResponse(result);
+        Assert.True(response.Success);
+        Assert.Equal("File written successfully: /created.txt", response.Message);
+        Assert.Equal("abc", string.Join("\n", sandbox.ReadFileLines("/created.txt")));
+    }
+
+    [Fact]
+    public async Task GetWriteFileFunction_SurfacesValidationErrors()
+    {
+        using var sandbox = new Sandbox();
+        var function = sandbox.GetWriteFileFunction();
+
+        await Assert.ThrowsAnyAsync<Exception>(async () =>
+            await function.InvokeAsync(
+                new AIFunctionArguments(new Dictionary<string, object?> { ["path"] = "/safe/../blocked.txt", ["content"] = "abc" }),
+                default));
+    }
+
+    [Fact]
+    public async Task GetApplyPatchFunction_ReturnsStructuredSuccessResult()
+    {
+        using var sandbox = new Sandbox();
+        sandbox.WriteFile("/file.txt", "Line 1\r\nLine 3");
+        var patch = @"--- a/file.txt
++++ b/file.txt
+@@ -1,2 +1,3 @@
+ Line 1
++Line 2
+ Line 3
+";
+
+        var function = sandbox.GetApplyPatchFunction();
+        var result = await function.InvokeAsync(
+            new AIFunctionArguments(new Dictionary<string, object?> { ["path"] = "/file.txt", ["patch"] = patch }),
+            default);
+
+        var response = DeserializeResponse(result);
+        Assert.True(response.Success);
+        Assert.Equal("Patch applied successfully to: /file.txt", response.Message);
+        Assert.Equal("Line 1\nLine 2\nLine 3", string.Join("\n", sandbox.ReadFileLines("/file.txt")));
+    }
+
+    [Fact]
+    public async Task GetApplyPatchFunction_SurfacesValidationErrors()
+    {
+        using var sandbox = new Sandbox();
+        sandbox.WriteFile("/file.txt", "Line 1");
+        var patch = @"--- a/file.txt
++++ b/file.txt
+@@ -1,1 +1,1 @@
+-Line 1
++Line 1 updated
+";
+
+        var function = sandbox.GetApplyPatchFunction();
+        await Assert.ThrowsAnyAsync<Exception>(async () =>
+            await function.InvokeAsync(
+                new AIFunctionArguments(new Dictionary<string, object?> { ["path"] = "/safe/../file.txt", ["patch"] = patch }),
+                default));
+    }
+
     private static SandboxToolResponse DeserializeResponse(object? result)
     {
         var json = Assert.IsType<System.Text.Json.JsonElement>(result);

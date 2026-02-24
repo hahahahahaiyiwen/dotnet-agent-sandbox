@@ -118,11 +118,11 @@ services.AddSandboxLogging();
 
 ## Shell Extensions
 
-Shell command extensions are in `AgentSandbox.Core.ShellExtensions`:
+Shell command extensions are in `AgentSandbox.Core.Shell.Extensions`:
 
 ```csharp
 using AgentSandbox.Core;
-using AgentSandbox.Core.ShellExtensions;
+using AgentSandbox.Core.Shell.Extensions;
 
 var options = new SandboxOptions
 {

@@ -114,7 +114,7 @@ Integrate with Microsoft.Extensions.AI or Semantic Kernel for AI agent tool call
 ```csharp
 using AgentSandbox.Core;
 using AgentSandbox.Extensions;
-using AgentSandbox.Core.ShellExtensions;
+using AgentSandbox.Core.Shell.Extensions;
 
 // Configure sandbox with extensions
 var options = new SandboxOptions
@@ -383,7 +383,7 @@ Extensions provide additional commands and must be registered via `SandboxOption
 
 ```csharp
 using AgentSandbox.Core;
-using AgentSandbox.Core.ShellExtensions;
+using AgentSandbox.Core.Shell.Extensions;
 
 var options = new SandboxOptions
 {
@@ -575,7 +575,11 @@ dotnet add package AgentSandbox.Extensions
 - `AgentSandbox.Core` and `AgentSandbox.Extensions` package versions are bumped to **5.0.0**.
 - `AgentSandbox.Extensions` AI tool wrappers now return structured responses (`success`, `message`, `output`) for clearer downstream handling.
 - `read_file` line-range parameters now align with `ReadFileLines` semantics using **1-based** indexes (`startLine` inclusive, `endLine` exclusive).
-- Namespace examples were corrected to `AgentSandbox.Core.ShellExtensions`.
+- Namespace examples use `AgentSandbox.Core.Shell.Extensions`.
+- **Breaking change:** `AgentSandbox.Extensions` AI tool wrappers now return structured responses instead of plain strings.
+  - **Migration:** update callers to read `success`, `message`, and optional `output` rather than assuming a raw string result.
+- **Breaking change:** `read_file` line-range parameters now use 1-based indexing (`startLine` inclusive, `endLine` exclusive).
+  - **Migration:** if you previously used 0-based indexing, increment requested line numbers accordingly.
 
 ## License
 

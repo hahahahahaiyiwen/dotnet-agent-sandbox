@@ -1,5 +1,6 @@
 using AgentSandbox.Core;
 using Microsoft.Extensions.AI;
+using System.Text.Json.Serialization;
 
 namespace AgentSandbox.Extensions;
 
@@ -66,7 +67,8 @@ public static class Extensions
             name: "read_file",
             description: "Read the contents of a file from the sandbox filesystem. Supports line-range reads for large files. " +
                 "Parameters: path (file path), startLine (1-based, optional, inclusive), endLine (1-based, optional, exclusive). " +
-                "Example: read_file('/logs.txt', 100, 120) returns lines 100-119.");
+                "Example: read_file('/logs.txt', 100, 120) returns lines 100-119. " +
+                "Validation and other failures (such as file not found or invalid line ranges) are surfaced as tool errors rather than being returned as error messages.");
     }
 
     /// <summary>
@@ -138,4 +140,7 @@ public static class Extensions
     }
 }
 
-public sealed record SandboxToolResponse(bool Success, string Message, string? Output = null);
+public sealed record SandboxToolResponse(
+    [property: JsonPropertyName("success")] bool Success,
+    [property: JsonPropertyName("message")] string Message,
+    [property: JsonPropertyName("output")] string? Output = null);
