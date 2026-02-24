@@ -47,6 +47,30 @@ public interface IShellContext
     }
 
     /// <summary>
+    /// Resolves all <c>secretRef:&lt;ref&gt;</c> tokens in a value through the centralized policy-enforced secret resolution path.
+    /// Returns false when any referenced secret is denied or cannot be resolved.
+    /// </summary>
+    /// <remarks>
+    /// Resolved output and any collected resolved secrets are sensitive and must not be logged or persisted.
+    /// Destination-aware egress policy evaluation requires <see cref="SecretAccessRequest.DestinationUri"/> and should include
+    /// <see cref="SecretAccessRequest.CommandName"/> for command-aware policy checks.
+    /// </remarks>
+    bool TryResolveSecretReferences(
+        string value,
+        SecretAccessRequest request,
+        ISet<string>? resolvedSecrets,
+        out string resolvedValue,
+        out string? errorMessage);
+
+    /// <summary>
+    /// Backward-compatible overload that resolves secret references without collecting resolved values.
+    /// </summary>
+    bool TryResolveSecretReferences(string value, SecretAccessRequest request, out string resolvedValue, out string? errorMessage)
+    {
+        return TryResolveSecretReferences(value, request, null, out resolvedValue, out errorMessage);
+    }
+
+    /// <summary>
     /// Gets or creates a cached value scoped to this session.
     /// Use for expensive objects like compiled regex patterns.
     /// Cache is cleared when the sandbox is disposed.

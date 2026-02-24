@@ -26,6 +26,7 @@ public class SandboxShell : IShellContext, ISandboxShellHost
     private readonly ISecretBroker? _secretBroker;
     private readonly SecretResolutionPolicy? _secretPolicy;
     private readonly HashSet<string> _resolvedSecrets = new(StringComparer.Ordinal);
+    private static readonly Regex SecretRefRegex = new(@"secretRef:([A-Za-z0-9._-]+)", RegexOptions.Compiled);
 
     #endregion
 
@@ -98,12 +99,67 @@ public class SandboxShell : IShellContext, ISandboxShellHost
         secretValue = resolvedSecret.Value;
         if (string.IsNullOrEmpty(secretValue))
         {
-            errorMessage = null;
+            errorMessage = $"secretRef '{secretRef}' resolved to an empty value";
             return false;
         }
 
         _resolvedSecrets.Add(secretValue);
 
+        errorMessage = null;
+        return true;
+    }
+
+    bool IShellContext.TryResolveSecretReferences(
+        string value,
+        SecretAccessRequest request,
+        ISet<string>? resolvedSecrets,
+        out string resolvedValue,
+        out string? errorMessage)
+    {
+        if (string.IsNullOrEmpty(value))
+        {
+            resolvedValue = value;
+            errorMessage = null;
+            return true;
+        }
+
+        var matches = SecretRefRegex.Matches(value);
+        if (matches.Count == 0)
+        {
+            resolvedValue = value;
+            errorMessage = null;
+            return true;
+        }
+
+        var output = new StringBuilder(value.Length);
+        var bufferedResolvedSecrets = resolvedSecrets != null ? new HashSet<string>(StringComparer.Ordinal) : null;
+        var lastIndex = 0;
+        foreach (Match match in matches)
+        {
+            output.Append(value, lastIndex, match.Index - lastIndex);
+            var secretRef = match.Groups[1].Value;
+            if (!((IShellContext)this).TryResolveSecret(secretRef, request, out var secretValue, out var innerError))
+            {
+                resolvedValue = string.Empty;
+                errorMessage = innerError ?? $"secretRef '{secretRef}' could not be resolved";
+                return false;
+            }
+
+            output.Append(secretValue);
+            bufferedResolvedSecrets?.Add(secretValue);
+            lastIndex = match.Index + match.Length;
+        }
+
+        output.Append(value, lastIndex, value.Length - lastIndex);
+        if (bufferedResolvedSecrets != null)
+        {
+            foreach (var secret in bufferedResolvedSecrets)
+            {
+                resolvedSecrets!.Add(secret);
+            }
+        }
+
+        resolvedValue = output.ToString();
         errorMessage = null;
         return true;
     }

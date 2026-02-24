@@ -212,6 +212,91 @@ public class CurlCommandTests
     }
 
     [Fact]
+    public void ShellContext_TryResolveSecretReferences_ResolvesUsingCentralPolicyPath()
+    {
+        var broker = new TestSecretBroker(new Dictionary<string, string>
+        {
+            ["api-token"] = "super-secret-token"
+        });
+        var shell = new SandboxShell(_fs, broker);
+        var context = (IShellContext)shell;
+        var resolvedSecrets = new HashSet<string>(StringComparer.Ordinal);
+
+        var success = context.TryResolveSecretReferences(
+            "Authorization: Bearer secretRef:api-token",
+            new SecretAccessRequest
+            {
+                CommandName = "custom-http"
+            },
+            resolvedSecrets,
+            out var resolvedValue,
+            out var errorMessage);
+
+        Assert.True(success);
+        Assert.Null(errorMessage);
+        Assert.Equal("Authorization: Bearer super-secret-token", resolvedValue);
+        Assert.Contains("super-secret-token", resolvedSecrets);
+    }
+
+    [Fact]
+    public void ShellContext_TryResolveSecretReferences_DeniesEgressByPolicy()
+    {
+        var broker = new TestSecretBroker(new Dictionary<string, string>
+        {
+            ["api-token"] = "super-secret-token"
+        });
+        var shell = new SandboxShell(
+            _fs,
+            broker,
+            new SecretResolutionPolicy
+            {
+                EgressHostAllowlistHook = context => context.DestinationUri.Host == "allowed.example.com"
+            });
+        var context = (IShellContext)shell;
+
+        var success = context.TryResolveSecretReferences(
+            "Bearer secretRef:api-token",
+            new SecretAccessRequest
+            {
+                CommandName = "custom-http",
+                DestinationUri = new Uri("https://blocked.example.com/data")
+            },
+            resolvedSecrets: null,
+            out _,
+            out var errorMessage);
+
+        Assert.False(success);
+        Assert.Contains("egress host 'blocked.example.com' is not allowed", errorMessage);
+    }
+
+    [Fact]
+    public void ShellContext_TryResolveSecretReferences_DoesNotMutateResolvedSecretsOnFailure()
+    {
+        var broker = new TestSecretBroker(new Dictionary<string, string>
+        {
+            ["api-token"] = "super-secret-token",
+            ["empty-token"] = string.Empty
+        });
+        var shell = new SandboxShell(_fs, broker);
+        var context = (IShellContext)shell;
+        var resolvedSecrets = new HashSet<string>(StringComparer.Ordinal);
+
+        var success = context.TryResolveSecretReferences(
+            "Authorization: Bearer secretRef:api-token; fallback=secretRef:empty-token",
+            new SecretAccessRequest
+            {
+                CommandName = "custom-http"
+            },
+            resolvedSecrets,
+            out _,
+            out var errorMessage);
+
+        Assert.False(success);
+        Assert.Contains("resolved to an empty value", errorMessage);
+        Assert.Empty(resolvedSecrets);
+    }
+
+    [Fact]
     public void Curl_WithSandboxPolicy_RejectsSecretRefOutsideAllowedRefs()
     {
         var handler = new MockHttpMessageHandler("OK", HttpStatusCode.OK);

@@ -1,7 +1,6 @@
 using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
-using System.Text.RegularExpressions;
 using AgentSandbox.Core.Security;
 
 namespace AgentSandbox.Core.Shell.Extensions;
@@ -40,8 +39,6 @@ Examples:
   curl -H ""Authorization: Bearer secretRef:api-token"" https://api.example.com/data
   curl -o output.json https://api.example.com/data
   curl -i -L https://example.com";
-
-    private static readonly Regex SecretRefRegex = new(@"secretRef:([A-Za-z0-9._-]+)", RegexOptions.Compiled);
 
     public CurlCommand() : this(new HttpClient())
     {
@@ -303,21 +300,12 @@ Examples:
 
     private static string ResolveSecretRefs(string value, IShellContext context, ISet<string> resolvedSecrets, SecretAccessRequest accessRequest)
     {
-        return SecretRefRegex.Replace(value, match =>
+        if (!context.TryResolveSecretReferences(value, accessRequest, resolvedSecrets, out var resolvedValue, out var errorMessage))
         {
-            var secretRef = match.Groups[1].Value;
-            if (!context.TryResolveSecret(secretRef, accessRequest, out var secretValue, out var errorMessage))
-            {
-                throw new InvalidOperationException(errorMessage ?? $"unknown secretRef '{secretRef}'");
-            }
+            throw new InvalidOperationException(errorMessage ?? "secret resolution failed");
+        }
 
-            if (!string.IsNullOrEmpty(secretValue))
-            {
-                resolvedSecrets.Add(secretValue);
-            }
-
-            return secretValue;
-        });
+        return resolvedValue;
     }
 
     private static string RedactResolvedSecrets(string value, IEnumerable<string> resolvedSecrets)
