@@ -36,21 +36,22 @@ var options = new ChatOptions { Tools = functions.ToList() };
 
 - **`bash_shell`** - Execute shell commands with dynamic help text
   - Parameters: `command` (string)
-  - Returns: Command output or error message
+  - Returns: Structured response with `success`, `message`, and optional `output`
 
 - **`read_file`** - Read file contents with line-range support
-  - Parameters: `path` (string), `startLine` (int, default 0), `endLine` (int?, default null)
-  - Returns: File contents or lines from startLine to endLine
+  - Parameters: `path` (string), `startLine` (int?, default null), `endLine` (int?, default null)
+  - Returns: Structured response with `success`, `message`, and `output` (joined file content)
+  - Line indexes are 1-based (`startLine` inclusive, `endLine` exclusive)
   - Example: `read_file('/logs.txt', 100, 120)` returns lines 100-119
 
 - **`write_file`** - Write or create files
   - Parameters: `path` (string), `content` (string)
-  - Returns: Success message or error
+  - Returns: Structured success response; validation failures surface as tool errors
   - Auto-creates parent directories
 
 - **`edit_file`** - Apply unified diff patches
   - Parameters: `path` (string), `patch` (string)
-  - Returns: Success message or error
+  - Returns: Structured success response; validation failures surface as tool errors
   - Supports standard unified diff format
 
 - **`get_skill`** - Retrieve skill information and instructions

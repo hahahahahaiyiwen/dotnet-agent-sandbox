@@ -67,7 +67,7 @@ Agent > exit
 dotnet add package AgentSandbox.Core
 
 # Or install a specific version
-dotnet add package AgentSandbox.Core --version 4.0.0
+dotnet add package AgentSandbox.Core --version 5.0.0
 ```
 
 ```csharp
@@ -114,7 +114,7 @@ Integrate with Microsoft.Extensions.AI or Semantic Kernel for AI agent tool call
 ```csharp
 using AgentSandbox.Core;
 using AgentSandbox.Extensions;
-using AgentSandbox.Core.Shell.Extensions;
+using AgentSandbox.Core.ShellExtensions;
 
 // Configure sandbox with extensions
 var options = new SandboxOptions
@@ -151,10 +151,10 @@ var skillFunction = sandbox.GetSkillFunction();      // Access loaded skills
 
 | Function | Tool Name | Purpose | 
 |----------|-----------|---------|
-| `GetBashFunction()` | `bash_shell` | Execute shell commands |
-| `GetReadFileFunction()` | `read_file` | Read files with optional line-range (e.g., lines 1-100) |
-| `GetWriteFileFunction()` | `write_file` | Write/create files |
-| `GetApplyPatchFunction()` | `edit_file` | Apply unified diff patches |
+| `GetBashFunction()` | `bash_shell` | Execute shell commands and return structured success/failure |
+| `GetReadFileFunction()` | `read_file` | Read files with optional 1-based line-range (`startLine` inclusive, `endLine` exclusive) |
+| `GetWriteFileFunction()` | `write_file` | Write/create files with structured success response |
+| `GetApplyPatchFunction()` | `edit_file` | Apply unified diff patches with structured success response |
 | `GetSkillFunction()` | `get_skill` | Query loaded agent skills |
 
 **For Semantic Kernel Compatibility:**
@@ -383,7 +383,7 @@ Extensions provide additional commands and must be registered via `SandboxOption
 
 ```csharp
 using AgentSandbox.Core;
-using AgentSandbox.Core.Shell.Extensions;
+using AgentSandbox.Core.ShellExtensions;
 
 var options = new SandboxOptions
 {
@@ -569,6 +569,13 @@ dotnet add package AgentSandbox.Core
 # Extensions (DI, Observability, AI Functions)
 dotnet add package AgentSandbox.Extensions
 ```
+
+## Release Notes (v5.0.0)
+
+- `AgentSandbox.Core` and `AgentSandbox.Extensions` package versions are bumped to **5.0.0**.
+- `AgentSandbox.Extensions` AI tool wrappers now return structured responses (`success`, `message`, `output`) for clearer downstream handling.
+- `read_file` line-range parameters now align with `ReadFileLines` semantics using **1-based** indexes (`startLine` inclusive, `endLine` exclusive).
+- Namespace examples were corrected to `AgentSandbox.Core.ShellExtensions`.
 
 ## License
 

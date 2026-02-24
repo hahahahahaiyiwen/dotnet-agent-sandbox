@@ -33,11 +33,14 @@ public static class Extensions
                 var result = sandbox.Execute(command);
                 if (result.Success)
                 {
-                    return string.IsNullOrEmpty(result.Stdout)
-                        ? "(command completed successfully)"
-                        : result.Stdout;
+                    return new SandboxToolResponse(
+                        Success: true,
+                        Message: "Command completed successfully.",
+                        Output: string.IsNullOrEmpty(result.Stdout) ? null : result.Stdout);
                 }
-                return $"Error: {result.Stderr}";
+                return new SandboxToolResponse(
+                    Success: false,
+                    Message: result.Stderr);
             },
             name: "bash_shell",
             description: sandbox.GetBashToolDescription());
@@ -52,25 +55,17 @@ public static class Extensions
     public static AIFunction GetReadFileFunction(this Sandbox sandbox)
     {
         return AIFunctionFactory.Create(
-            (string path, int startLine = 0, int? endLine = null) =>
+            (string path, int? startLine = null, int? endLine = null) =>
             {
-                try
-                {
-                    // ReadFileLines uses 1-indexed line numbers, so convert from 0-based
-                    int? adjustedStartLine = startLine > 0 ? startLine + 1 : null;
-                    int? adjustedEndLine = endLine.HasValue ? endLine + 1 : null;
-                    
-                    var lines = sandbox.ReadFileLines(path, adjustedStartLine, adjustedEndLine);
-                    return string.Join("\n", lines);
-                }
-                catch (Exception ex)
-                {
-                    return $"Error reading file: {ex.Message}";
-                }
+                var lines = sandbox.ReadFileLines(path, startLine, endLine).ToList();
+                return new SandboxToolResponse(
+                    Success: true,
+                    Message: $"Read {lines.Count} line(s) from '{path}'.",
+                    Output: string.Join("\n", lines));
             },
             name: "read_file",
             description: "Read the contents of a file from the sandbox filesystem. Supports line-range reads for large files. " +
-                "Parameters: path (file path), startLine (0-based, default 0), endLine (0-based, exclusive, default null=EOF). " +
+                "Parameters: path (file path), startLine (1-based, optional, inclusive), endLine (1-based, optional, exclusive). " +
                 "Example: read_file('/logs.txt', 100, 120) returns lines 100-119.");
     }
 
@@ -84,18 +79,14 @@ public static class Extensions
         return AIFunctionFactory.Create(
             (string path, string content) =>
             {
-                try
-                {
-                    sandbox.WriteFile(path, content);
-                    return $"File written successfully: {path}";
-                }
-                catch (Exception ex)
-                {
-                    return $"Error writing file: {ex.Message}";
-                }
+                sandbox.WriteFile(path, content);
+                return new SandboxToolResponse(
+                    Success: true,
+                    Message: $"File written successfully: {path}");
             },
             name: "write_file",
-            description: "Write or create a file in the sandbox filesystem. Automatically creates parent directories. Parameters: path (file path), content (file contents as text).");
+            description: "Write or create a file in the sandbox filesystem. Automatically creates parent directories. " +
+                "Parameters: path (file path), content (file contents as text). Validation failures are surfaced as tool errors.");
     }
 
     /// <summary>
@@ -108,18 +99,14 @@ public static class Extensions
         return AIFunctionFactory.Create(
             (string path, string patch) =>
             {
-                try
-                {
-                    sandbox.ApplyPatch(path, patch);
-                    return $"Patch applied successfully to: {path}";
-                }
-                catch (Exception ex)
-                {
-                    return $"Error applying patch: {ex.Message}";
-                }
+                sandbox.ApplyPatch(path, patch);
+                return new SandboxToolResponse(
+                    Success: true,
+                    Message: $"Patch applied successfully to: {path}");
             },
             name: "edit_file",
-            description: "Apply a unified diff patch to a file in the sandbox. Supports standard unified diff format with lines starting with '-' (remove), '+' (add), and ' ' (context). Parameters: path (file path), patch (unified diff content).");
+            description: "Apply a unified diff patch to a file in the sandbox. Supports standard unified diff format with lines starting with '-' (remove), '+' (add), and ' ' (context). " +
+                "Parameters: path (file path), patch (unified diff content). Validation failures are surfaced as tool errors.");
     }
 
     /// <summary>
@@ -150,3 +137,5 @@ public static class Extensions
         return skill.Metadata.Instructions;
     }
 }
+
+public sealed record SandboxToolResponse(bool Success, string Message, string? Output = null);
