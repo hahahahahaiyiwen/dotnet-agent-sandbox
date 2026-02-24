@@ -26,6 +26,7 @@ public class SandboxShell : IShellContext, ISandboxShellHost
     private readonly ISecretBroker? _secretBroker;
     private readonly SecretResolutionPolicy? _secretPolicy;
     private readonly HashSet<string> _resolvedSecrets = new(StringComparer.Ordinal);
+    private static readonly Regex SecretRefRegex = new(@"secretRef:([A-Za-z0-9._-]+)", RegexOptions.Compiled);
 
     #endregion
 
@@ -104,6 +105,50 @@ public class SandboxShell : IShellContext, ISandboxShellHost
 
         _resolvedSecrets.Add(secretValue);
 
+        errorMessage = null;
+        return true;
+    }
+
+    bool IShellContext.TryResolveSecretReferences(
+        string value,
+        SecretAccessRequest request,
+        ISet<string>? resolvedSecrets,
+        out string resolvedValue,
+        out string? errorMessage)
+    {
+        if (string.IsNullOrEmpty(value))
+        {
+            resolvedValue = value;
+            errorMessage = null;
+            return true;
+        }
+
+        string? resolutionError = null;
+        var resolved = SecretRefRegex.Replace(value, match =>
+        {
+            var secretRef = match.Groups[1].Value;
+            if (!((IShellContext)this).TryResolveSecret(secretRef, request, out var secretValue, out var innerError))
+            {
+                resolutionError = innerError ?? $"unknown secretRef '{secretRef}'";
+                return match.Value;
+            }
+
+            if (!string.IsNullOrEmpty(secretValue))
+            {
+                resolvedSecrets?.Add(secretValue);
+            }
+
+            return secretValue;
+        });
+
+        if (resolutionError != null)
+        {
+            resolvedValue = string.Empty;
+            errorMessage = resolutionError;
+            return false;
+        }
+
+        resolvedValue = resolved;
         errorMessage = null;
         return true;
     }

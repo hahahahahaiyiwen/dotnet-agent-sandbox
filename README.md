@@ -449,6 +449,8 @@ var options = new SandboxOptions
 
 For `curl`, you can additionally enforce a per-command allowlist with repeatable `--allowed-ref <ref>` arguments.
 
+For custom shell extensions, resolve `secretRef:<ref>` tokens through `IShellContext.TryResolveSecretReferences(...)` so command allowlist, sandbox allowlist, max-age, and egress checks are enforced consistently.
+
 ## Multi-Sandbox Management
 
 ```csharp

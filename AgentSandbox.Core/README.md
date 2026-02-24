@@ -99,6 +99,8 @@ var options = new SandboxOptions
 
 `curl` also supports per-command allowlists with repeatable `--allowed-ref` flags.
 
+For custom shell extensions, always resolve `secretRef:<ref>` placeholders via `IShellContext.TryResolveSecretReferences(...)` rather than ad hoc parsing so secret policy checks are applied uniformly.
+
 ## Capabilities Extension Pattern
 
 `ISandboxCapability` allows extension packages to configure `SandboxOptions` without adding dependencies to core:
