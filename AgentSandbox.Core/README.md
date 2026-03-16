@@ -9,9 +9,9 @@ A lightweight, in-memory virtual filesystem and shell for AI agents. Zero extern
    - `WriteFile(path, content)` for atomic full-file writes
    - `ApplyPatch(path, patch)` for incremental context-aware edits
 2. **One agent-session = one sandbox instance**:
-   - Single-threaded ownership model by design
-   - No shared mutable runtime within a session, so no thread-safety coordination in the sandbox core
-   - Integrators must treat each sandbox as single-owner execution context (no overlapping command execution in one sandbox)
+   - Single-owner model by design
+   - Phase 1 concurrency safety is fail-fast: one in-flight sandbox operation at a time
+   - Integrators may call from multiple threads, but overlapping operations on the same sandbox instance are rejected deterministically
 3. **Cross-session state transition via snapshots**:
    - Session handoff and recovery are done through snapshot create/restore
    - Filesystem, working directory, and environment state are portable checkpoint data
@@ -26,13 +26,13 @@ A lightweight, in-memory virtual filesystem and shell for AI agents. Zero extern
 
 ## Non-goals / Constraints
 - Shell intentionally does not support pipes, command chaining (`||`), or stdin redirection.
-- Sandbox internals are single-threaded by design; concurrency is handled by separate sandbox instances at orchestration level.
+- Phase 1 does not provide parallel command execution in one sandbox instance.
 
 ## Integration Invariant: Single Active Executor per Sandbox
 - A sandbox instance is a single-agent execution lane.
-- Public integrations should not dispatch concurrent `Execute` calls to the same sandbox.
+- Public integrations should avoid dispatching overlapping core operations to the same sandbox.
 - For parallel work, allocate separate sandbox instances via `SandboxManager`.
-- When this invariant is violated, host integrations should fail fast with a deterministic integration-level error instead of queuing or interleaving execution.
+- When this invariant is violated, the sandbox fails fast with deterministic errors instead of queuing or interleaving execution.
 
 ## Design Outcome
 The system optimizes for simplicity, correctness, and reproducibility over broad API surface area: agents get just enough primitives to work effectively, and orchestration-level continuity is handled explicitly via snapshot-based state transfer.
