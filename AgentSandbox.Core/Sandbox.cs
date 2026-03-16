@@ -133,13 +133,20 @@ public class Sandbox : IDisposable, IObservableSandbox
     /// </summary>
     public TCapability GetCapability<TCapability>() where TCapability : class
     {
-        ThrowIfDisposed();
-        if (TryGetCapability<TCapability>(out var capability))
+        EnterOperationGate();
+        try
         {
-            return capability!;
-        }
+            if (TryGetCapabilityUnsafe<TCapability>(out var capability))
+            {
+                return capability!;
+            }
 
-        throw new InvalidOperationException($"Capability '{typeof(TCapability).Name}' is not registered.");
+            throw new InvalidOperationException($"Capability '{typeof(TCapability).Name}' is not registered.");
+        }
+        finally
+        {
+            ExitOperationGate();
+        }
     }
 
     /// <summary>
@@ -147,15 +154,15 @@ public class Sandbox : IDisposable, IObservableSandbox
     /// </summary>
     public bool TryGetCapability<TCapability>(out TCapability? capability) where TCapability : class
     {
-        ThrowIfDisposed();
-        if (_capabilities.TryGetValue(typeof(TCapability), out var instance))
+        EnterOperationGate();
+        try
         {
-            capability = (TCapability)instance;
-            return true;
+            return TryGetCapabilityUnsafe(out capability);
         }
-
-        capability = null;
-        return false;
+        finally
+        {
+            ExitOperationGate();
+        }
     }
 
     private void InitializeCapabilities()
@@ -271,14 +278,22 @@ public class Sandbox : IDisposable, IObservableSandbox
     /// </summary>
     public string GetBashToolDescription()
     {
-        var sb = new StringBuilder();
-        
-        sb.Append("Run shell commands. ");
-        sb.Append($"Available commands: {string.Join(", ", _shell.GetAvailableCommands())}. ");
-        sb.Append("Run 'help' to list commands or '<command> -h' for detailed help on a specific command. ");
-        sb.Append("Commands use short-style arguments (e.g., -l, -a, -n). ");
+        EnterOperationGate();
+        try
+        {
+            var sb = new StringBuilder();
+            
+            sb.Append("Run shell commands. ");
+            sb.Append($"Available commands: {string.Join(", ", _shell.GetAvailableCommands())}. ");
+            sb.Append("Run 'help' to list commands or '<command> -h' for detailed help on a specific command. ");
+            sb.Append("Commands use short-style arguments (e.g., -l, -a, -n). ");
 
-        return sb.ToString();
+            return sb.ToString();
+        }
+        finally
+        {
+            ExitOperationGate();
+        }
     }
 
     #endregion
@@ -691,7 +706,15 @@ public class Sandbox : IDisposable, IObservableSandbox
     /// </summary>
     public IDisposable Subscribe(ISandboxObserver observer)
     {
-        return _observerManager.Subscribe(observer);
+        EnterOperationGate();
+        try
+        {
+            return _observerManager.Subscribe(observer);
+        }
+        finally
+        {
+            ExitOperationGate();
+        }
     }
 
     #endregion
@@ -729,6 +752,13 @@ public class Sandbox : IDisposable, IObservableSandbox
     private void TrackTimedOutCommand(Task<ShellResult> executionTask)
     {
         Volatile.Write(ref _timedOutCommandTask, executionTask);
+        if (executionTask.IsCompleted)
+        {
+            Volatile.Write(ref _timedOutCommandTask, null);
+            ExitOperationGate();
+            return;
+        }
+
         executionTask.ContinueWith(static (task, state) =>
         {
             var sandbox = (Sandbox)state!;
@@ -740,7 +770,7 @@ public class Sandbox : IDisposable, IObservableSandbox
 
             Volatile.Write(ref sandbox._timedOutCommandTask, null);
             sandbox.ExitOperationGate();
-        }, this, TaskScheduler.Default);
+        }, this, CancellationToken.None, TaskContinuationOptions.ExecuteSynchronously, TaskScheduler.Default);
     }
 
     private SandboxStats BuildStatsUnsafe()
@@ -771,14 +801,10 @@ public class Sandbox : IDisposable, IObservableSandbox
             return;
         }
 
-        if (Interlocked.CompareExchange(ref _operationInProgress, 1, 0) != 0)
-        {
-            throw new InvalidOperationException(ConcurrentOperationError);
-        }
+        Interlocked.Exchange(ref _disposed, 1);
 
-        if (Interlocked.Exchange(ref _disposed, 1) == 1)
+        if (!TryEnterDisposeGate(TimeSpan.FromSeconds(5)))
         {
-            ExitOperationGate();
             return;
         }
 
@@ -827,6 +853,37 @@ public class Sandbox : IDisposable, IObservableSandbox
         {
             ExitOperationGate();
         }
+    }
+
+    private bool TryEnterCapabilityUnsafe<TCapability>(out TCapability? capability) where TCapability : class
+    {
+        if (_capabilities.TryGetValue(typeof(TCapability), out var instance))
+        {
+            capability = (TCapability)instance;
+            return true;
+        }
+
+        capability = null;
+        return false;
+    }
+
+    private bool TryGetCapabilityUnsafe<TCapability>(out TCapability? capability) where TCapability : class
+        => TryEnterCapabilityUnsafe(out capability);
+
+    private bool TryEnterDisposeGate(TimeSpan timeout)
+    {
+        var deadline = DateTime.UtcNow + timeout;
+        while (DateTime.UtcNow <= deadline)
+        {
+            if (Interlocked.CompareExchange(ref _operationInProgress, 1, 0) == 0)
+            {
+                return true;
+            }
+
+            Thread.Sleep(10);
+        }
+
+        return false;
     }
 
     #endregion

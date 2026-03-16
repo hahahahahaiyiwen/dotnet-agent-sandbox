@@ -8,7 +8,7 @@ namespace AgentSandbox.Tests;
 public class SandboxConcurrencyTests
 {
     [Fact]
-    public void WriteFile_WhenCommandIsInProgress_FailsFastWithDeterministicError()
+    public async Task WriteFile_WhenCommandIsInProgress_FailsFastWithDeterministicError()
     {
         using var started = new ManualResetEventSlim(false);
         using var release = new ManualResetEventSlim(false);
@@ -18,14 +18,19 @@ public class SandboxConcurrencyTests
         });
 
         var commandTask = Task.Run(() => sandbox.Execute("block"));
-        Assert.True(started.Wait(TimeSpan.FromSeconds(1)));
+        try
+        {
+            Assert.True(started.Wait(TimeSpan.FromSeconds(1)));
 
-        var ex = Assert.Throws<InvalidOperationException>(() => sandbox.WriteFile("/race.txt", "content"));
-        Assert.Contains("already in progress", ex.Message, StringComparison.OrdinalIgnoreCase);
-
-        release.Set();
-        var result = commandTask.GetAwaiter().GetResult();
-        Assert.True(result.Success);
+            var ex = Assert.Throws<InvalidOperationException>(() => sandbox.WriteFile("/race.txt", "content"));
+            Assert.Contains("already in progress", ex.Message, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            release.Set();
+            var result = await commandTask.WaitAsync(TimeSpan.FromSeconds(2));
+            Assert.True(result.Success);
+        }
     }
 
     [Fact]
@@ -81,7 +86,10 @@ public class SandboxConcurrencyTests
         public ShellResult Execute(string[] args, IShellContext context)
         {
             _started.Set();
-            _release.Wait();
+            if (!_release.Wait(TimeSpan.FromSeconds(2)))
+            {
+                return ShellResult.Error("timeout waiting for test release");
+            }
             return ShellResult.Ok("done");
         }
     }
