@@ -613,7 +613,6 @@ public class Sandbox : IDisposable, IObservableSandbox
     /// </summary>
     public SandboxSnapshot CreateSnapshot()
     {
-        EnterOperationGate();
         EnterFileReadLane();
         try
         {
@@ -641,7 +640,6 @@ public class Sandbox : IDisposable, IObservableSandbox
         finally
         {
             ExitFileReadLane();
-            ExitOperationGate();
         }
     }
 
