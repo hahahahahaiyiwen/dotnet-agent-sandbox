@@ -69,6 +69,25 @@ public class SandboxConcurrencyTests
         Assert.Equal("ready", persisted);
     }
 
+    [Fact]
+    public void Dispose_WhenTimedOutCommandIsRunning_DoesNotThrow_AndRejectsNewOperations()
+    {
+        using var sandbox = new Sandbox(options: new SandboxOptions
+        {
+            CommandTimeout = TimeSpan.FromMilliseconds(20),
+            ShellExtensions = [new SlowCommand()]
+        });
+
+        var timeoutResult = sandbox.Execute("slow 200");
+        Assert.False(timeoutResult.Success);
+        Assert.Contains("timed out", timeoutResult.Stderr, StringComparison.OrdinalIgnoreCase);
+
+        var ex = Record.Exception(() => sandbox.Dispose());
+        Assert.Null(ex);
+
+        Assert.Throws<ObjectDisposedException>(() => sandbox.WriteFile("/after-dispose.txt", "blocked"));
+    }
+
     private sealed class BlockingCommand : IShellCommand
     {
         private readonly ManualResetEventSlim _started;

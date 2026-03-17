@@ -29,6 +29,9 @@ public class Sandbox : IDisposable, IObservableSandbox
     private readonly SandboxOperationJournal _operationJournal;
     private readonly Action<string>? _onDisposed;
     private readonly Activity? _sandboxActivity;
+    private int _disposeRequested;
+    private int _cleanupCompleted;
+    private int _cleanupScheduled;
     private int _disposed;
     private int _operationInProgress;
     private Task<ShellResult>? _timedOutCommandTask;
@@ -737,7 +740,7 @@ public class Sandbox : IDisposable, IObservableSandbox
         }
 
         // Re-check after acquisition to close races with Dispose().
-        if (Volatile.Read(ref _disposed) == 1)
+        if (Volatile.Read(ref _disposed) == 1 || Volatile.Read(ref _disposeRequested) == 1)
         {
             ExitOperationGate();
             throw new ObjectDisposedException(nameof(Sandbox));
@@ -790,26 +793,35 @@ public class Sandbox : IDisposable, IObservableSandbox
 
     private void ThrowIfDisposed()
     {
-        if (Volatile.Read(ref _disposed) == 1)
+        if (Volatile.Read(ref _disposed) == 1 || Volatile.Read(ref _disposeRequested) == 1)
             throw new ObjectDisposedException(nameof(Sandbox));
     }
 
     public void Dispose()
     {
-        if (Volatile.Read(ref _disposed) == 1)
+        if (Interlocked.CompareExchange(ref _disposeRequested, 1, 0) != 0)
         {
             return;
         }
 
-        Interlocked.Exchange(ref _disposed, 1);
-
-        if (!TryEnterDisposeGate(TimeSpan.FromSeconds(5)))
+        if (TryEnterDisposeGate(TimeSpan.FromSeconds(5)))
         {
+            CompleteDisposeCleanup();
             return;
         }
 
+        ScheduleDeferredCleanup();
+    }
+
+    private void CompleteDisposeCleanup()
+    {
         try
         {
+            if (Interlocked.CompareExchange(ref _cleanupCompleted, 1, 0) != 0)
+            {
+                return;
+            }
+
             // Record sandbox disposal telemetry
             if (TelemetryEnabled)
             {
@@ -846,13 +858,58 @@ public class Sandbox : IDisposable, IObservableSandbox
             
             // Notify manager to remove reference
             _onDisposed?.Invoke(Id);
-            
+            Interlocked.Exchange(ref _disposed, 1);
+
             GC.SuppressFinalize(this);
         }
         finally
         {
             ExitOperationGate();
         }
+    }
+
+    private void ScheduleDeferredCleanup()
+    {
+        if (Interlocked.CompareExchange(ref _cleanupScheduled, 1, 0) != 0)
+        {
+            return;
+        }
+
+        Task.Run(() =>
+        {
+            try
+            {
+                while (Volatile.Read(ref _cleanupCompleted) == 0)
+                {
+                    if (TryEnterDisposeGate(TimeSpan.FromMilliseconds(100)))
+                    {
+                        CompleteDisposeCleanup();
+                        return;
+                    }
+
+                    var timedOutTask = Volatile.Read(ref _timedOutCommandTask);
+                    if (timedOutTask is not null)
+                    {
+                        try
+                        {
+                            timedOutTask.Wait(TimeSpan.FromMilliseconds(100));
+                        }
+                        catch
+                        {
+                            // ignore and retry gate acquisition
+                        }
+                    }
+                    else
+                    {
+                        Thread.Sleep(50);
+                    }
+                }
+            }
+            finally
+            {
+                Interlocked.Exchange(ref _cleanupScheduled, 0);
+            }
+        });
     }
 
     private bool TryEnterCapabilityUnsafe<TCapability>(out TCapability? capability) where TCapability : class
