@@ -27,6 +27,8 @@ public class Sandbox : IDisposable, IObservableSandbox
     private readonly Dictionary<Type, object> _capabilities = new();
     private readonly ISandboxEventEmitter _eventEmitter;
     private readonly SandboxOperationJournal _operationJournal;
+    private readonly ReaderWriterLockSlim _fileOperationLock = new(LockRecursionPolicy.NoRecursion);
+    private readonly object _journalSync = new();
     private readonly Action<string>? _onDisposed;
     private readonly Activity? _sandboxActivity;
     private int _disposeRequested;
@@ -36,7 +38,7 @@ public class Sandbox : IDisposable, IObservableSandbox
     private int _operationInProgress;
     private Task<ShellResult>? _timedOutCommandTask;
     private const string ConcurrentOperationError =
-        "Another sandbox operation is already in progress. Concurrent operations on a single sandbox are not supported in Phase 1.";
+        "Another sandbox operation is already in progress. This operation conflicts with the sandbox concurrency rules in Phase 2.";
     private const string TimedOutCommandInProgressError =
         "A timed-out command is still completing in the background. Wait for it to finish before issuing another operation.";
     private bool TelemetryEnabled => _options.Telemetry?.Enabled == true;
@@ -221,8 +223,10 @@ public class Sandbox : IDisposable, IObservableSandbox
     public ShellResult Execute(string command)
     {
         EnterOperationGate();
+        EnterFileWriteLane();
         var stopwatch = Stopwatch.StartNew();
         Activity? activity = null;
+        var releaseFileWriteLane = true;
         var releaseOperationGate = true;
 
         try
@@ -267,6 +271,10 @@ public class Sandbox : IDisposable, IObservableSandbox
         }
         finally
         {
+            if (releaseFileWriteLane)
+            {
+                ExitFileWriteLane();
+            }
             if (releaseOperationGate)
             {
                 ExitOperationGate();
@@ -322,7 +330,7 @@ public class Sandbox : IDisposable, IObservableSandbox
     /// <exception cref="InvalidOperationException">Path is a directory.</exception>
     public IEnumerable<string> ReadFileLines(string path, int? startLine = null, int? endLine = null)
     {
-        EnterOperationGate();
+        EnterFileReadLane();
         
         var stopwatch = Stopwatch.StartNew();
         Activity? activity = null;
@@ -356,7 +364,7 @@ public class Sandbox : IDisposable, IObservableSandbox
         }
         finally
         {
-            ExitOperationGate();
+            ExitFileReadLane();
             activity?.Dispose();
         }
     }
@@ -370,7 +378,7 @@ public class Sandbox : IDisposable, IObservableSandbox
     /// <exception cref="InvalidOperationException">Path is a directory.</exception>
     public void WriteFile(string path, string content)
     {
-        EnterOperationGate();
+        EnterFileWriteLane();
 
         var stopwatch = Stopwatch.StartNew();
         Activity? activity = null;
@@ -394,7 +402,7 @@ public class Sandbox : IDisposable, IObservableSandbox
         }
         finally
         {
-            ExitOperationGate();
+            ExitFileWriteLane();
             activity?.Dispose();
         }
     }
@@ -410,7 +418,7 @@ public class Sandbox : IDisposable, IObservableSandbox
     /// <exception cref="InvalidOperationException">Patch could not be applied (hunk mismatch).</exception>
     public void ApplyPatch(string path, string patch)
     {
-        EnterOperationGate();
+        EnterFileWriteLane();
 
         var stopwatch = Stopwatch.StartNew();
         Activity? activity = null;
@@ -449,7 +457,7 @@ public class Sandbox : IDisposable, IObservableSandbox
         }
         finally
         {
-            ExitOperationGate();
+            ExitFileWriteLane();
             activity?.Dispose();
         }
     }
@@ -610,6 +618,7 @@ public class Sandbox : IDisposable, IObservableSandbox
     public SandboxSnapshot CreateSnapshot()
     {
         EnterOperationGate();
+        EnterFileReadLane();
         try
         {
             var fileSystemData = _fileSystem.CreateSnapshot();
@@ -635,6 +644,7 @@ public class Sandbox : IDisposable, IObservableSandbox
         }
         finally
         {
+            ExitFileReadLane();
             ExitOperationGate();
         }
     }
@@ -645,6 +655,7 @@ public class Sandbox : IDisposable, IObservableSandbox
     public void RestoreSnapshot(SandboxSnapshot snapshot)
     {
         EnterOperationGate();
+        EnterFileWriteLane();
         try
         {
             _fileSystem.RestoreSnapshot(snapshot.FileSystemData);
@@ -660,6 +671,7 @@ public class Sandbox : IDisposable, IObservableSandbox
         }
         finally
         {
+            ExitFileWriteLane();
             ExitOperationGate();
         }
     }
@@ -673,14 +685,10 @@ public class Sandbox : IDisposable, IObservableSandbox
     /// </summary>
     public IReadOnlyList<ShellResult> GetHistory()
     {
-        EnterOperationGate();
-        try
+        ThrowIfDisposed();
+        lock (_journalSync)
         {
             return _operationJournal.GetCommandHistoryProjection();
-        }
-        finally
-        {
-            ExitOperationGate();
         }
     }
 
@@ -689,14 +697,14 @@ public class Sandbox : IDisposable, IObservableSandbox
     /// </summary>
     public SandboxStats GetStats()
     {
-        EnterOperationGate();
+        EnterFileReadLane();
         try
         {
             return BuildStatsUnsafe();
         }
         finally
         {
-            ExitOperationGate();
+            ExitFileReadLane();
         }
     }
 
@@ -752,6 +760,60 @@ public class Sandbox : IDisposable, IObservableSandbox
         Interlocked.Exchange(ref _operationInProgress, 0);
     }
 
+    private void EnterFileReadLane()
+    {
+        ThrowIfDisposed();
+        ThrowIfTimedOutCommandInProgress();
+        _fileOperationLock.EnterReadLock();
+
+        if (Volatile.Read(ref _disposed) == 1 || Volatile.Read(ref _disposeRequested) == 1)
+        {
+            _fileOperationLock.ExitReadLock();
+            throw new ObjectDisposedException(nameof(Sandbox));
+        }
+        var timedOutTask = Volatile.Read(ref _timedOutCommandTask);
+        if (timedOutTask is not null && !timedOutTask.IsCompleted)
+        {
+            _fileOperationLock.ExitReadLock();
+            throw new InvalidOperationException(TimedOutCommandInProgressError);
+        }
+    }
+
+    private void ExitFileReadLane()
+    {
+        if (_fileOperationLock.IsReadLockHeld)
+        {
+            _fileOperationLock.ExitReadLock();
+        }
+    }
+
+    private void EnterFileWriteLane()
+    {
+        ThrowIfDisposed();
+        ThrowIfTimedOutCommandInProgress();
+        _fileOperationLock.EnterWriteLock();
+
+        if (Volatile.Read(ref _disposed) == 1 || Volatile.Read(ref _disposeRequested) == 1)
+        {
+            _fileOperationLock.ExitWriteLock();
+            throw new ObjectDisposedException(nameof(Sandbox));
+        }
+        var timedOutTask = Volatile.Read(ref _timedOutCommandTask);
+        if (timedOutTask is not null && !timedOutTask.IsCompleted)
+        {
+            _fileOperationLock.ExitWriteLock();
+            throw new InvalidOperationException(TimedOutCommandInProgressError);
+        }
+    }
+
+    private void ExitFileWriteLane()
+    {
+        if (_fileOperationLock.IsWriteLockHeld)
+        {
+            _fileOperationLock.ExitWriteLock();
+        }
+    }
+
     private void TrackTimedOutCommand(Task<ShellResult> executionTask)
     {
         Volatile.Write(ref _timedOutCommandTask, executionTask);
@@ -778,13 +840,21 @@ public class Sandbox : IDisposable, IObservableSandbox
 
     private SandboxStats BuildStatsUnsafe()
     {
+        int commandCount;
+        int capabilityOperationCount;
+        lock (_journalSync)
+        {
+            commandCount = _operationJournal.CountByCategory("shell");
+            capabilityOperationCount = _operationJournal.CountByCategory("capability");
+        }
+
         return new SandboxStats
         {
             Id = Id,
             FileCount = _fileSystem.NodeCount,
             TotalSize = _fileSystem.TotalSize, // in bytes
-            CommandCount = _operationJournal.CountByCategory("shell"),
-            CapabilityOperationCount = _operationJournal.CountByCategory("capability"),
+            CommandCount = commandCount,
+            CapabilityOperationCount = capabilityOperationCount,
             CurrentDirectory = _shell.CurrentDirectory,
             CreatedAt = CreatedAt,
             LastActivityAt = LastActivityAt
@@ -795,6 +865,15 @@ public class Sandbox : IDisposable, IObservableSandbox
     {
         if (Volatile.Read(ref _disposed) == 1 || Volatile.Read(ref _disposeRequested) == 1)
             throw new ObjectDisposedException(nameof(Sandbox));
+    }
+
+    private void ThrowIfTimedOutCommandInProgress()
+    {
+        var timedOutTask = Volatile.Read(ref _timedOutCommandTask);
+        if (timedOutTask is not null && !timedOutTask.IsCompleted)
+        {
+            throw new InvalidOperationException(TimedOutCommandInProgressError);
+        }
     }
 
     public void Dispose()
@@ -815,6 +894,7 @@ public class Sandbox : IDisposable, IObservableSandbox
 
     private void CompleteDisposeCleanup()
     {
+        _fileOperationLock.EnterWriteLock();
         try
         {
             if (Interlocked.CompareExchange(ref _cleanupCompleted, 1, 0) != 0)
@@ -828,7 +908,10 @@ public class Sandbox : IDisposable, IObservableSandbox
                 _telemetry.RecordSandboxDisposed();
                 
                 // End sandbox-level activity
-                _sandboxActivity?.SetTag("sandbox.command_count", _operationJournal.CountByCategory("shell"));
+                lock (_journalSync)
+                {
+                    _sandboxActivity?.SetTag("sandbox.command_count", _operationJournal.CountByCategory("shell"));
+                }
                 _sandboxActivity?.Dispose();
             }
 
@@ -853,7 +936,10 @@ public class Sandbox : IDisposable, IObservableSandbox
             }
 
             _capabilities.Clear();
-            _operationJournal.Clear();
+            lock (_journalSync)
+            {
+                _operationJournal.Clear();
+            }
             _observerManager.Clear();
             
             // Notify manager to remove reference
@@ -864,6 +950,7 @@ public class Sandbox : IDisposable, IObservableSandbox
         }
         finally
         {
+            _fileOperationLock.ExitWriteLock();
             ExitOperationGate();
         }
     }
@@ -958,36 +1045,42 @@ public class Sandbox : IDisposable, IObservableSandbox
             metadata["errorCode"] = capabilityEvent.ErrorCode;
             metadata["errorMessage"] = capabilityEvent.ErrorMessage;
 
-            _operationJournal.Append(new SandboxOperationRecord
+            lock (_journalSync)
             {
-                Timestamp = capabilityEvent.Timestamp,
-                Category = "capability",
-                Operation = capabilityEvent.OperationName,
-                Target = capabilityEvent.CapabilityName,
-                Success = capabilityEvent.Success ?? false,
-                Duration = capabilityEvent.Duration,
-                CorrelationId = capabilityEvent.TraceId,
-                Metadata = metadata
-            });
+                _operationJournal.Append(new SandboxOperationRecord
+                {
+                    Timestamp = capabilityEvent.Timestamp,
+                    Category = "capability",
+                    Operation = capabilityEvent.OperationName,
+                    Target = capabilityEvent.CapabilityName,
+                    Success = capabilityEvent.Success ?? false,
+                    Duration = capabilityEvent.Duration,
+                    CorrelationId = capabilityEvent.TraceId,
+                    Metadata = metadata
+                });
+            }
         }
     }
 
     private void AppendShellOperation(ShellResult result)
     {
-        _operationJournal.Append(new SandboxOperationRecord
+        lock (_journalSync)
         {
-            Timestamp = DateTime.UtcNow,
-            Category = "shell",
-            Operation = "execute",
-            Target = _shell.CurrentDirectory,
-            Success = result.Success,
-            Duration = result.Duration,
-            Metadata = new Dictionary<string, object?>
+            _operationJournal.Append(new SandboxOperationRecord
             {
-                ["command"] = result.Command
-            },
-            ShellResult = result
-        });
+                Timestamp = DateTime.UtcNow,
+                Category = "shell",
+                Operation = "execute",
+                Target = _shell.CurrentDirectory,
+                Success = result.Success,
+                Duration = result.Duration,
+                Metadata = new Dictionary<string, object?>
+                {
+                    ["command"] = result.Command
+                },
+                ShellResult = result
+            });
+        }
     }
 
     #endregion

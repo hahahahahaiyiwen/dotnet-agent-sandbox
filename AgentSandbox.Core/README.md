@@ -10,8 +10,8 @@ A lightweight, in-memory virtual filesystem and shell for AI agents. Zero extern
    - `ApplyPatch(path, patch)` for incremental context-aware edits
 2. **One agent-session = one sandbox instance**:
    - Single-owner model by design
-   - Phase 1 concurrency safety is fail-fast for stateful core operations (`Execute`, file I/O, snapshot, stats/history, capability lookup)
-   - Integrators may call from multiple threads, but overlapping stateful operations on the same sandbox instance are rejected deterministically
+   - Phase 2 concurrency model allows concurrent file reads while serializing file writes
+   - `Execute` remains exclusive and blocks overlapping stateful operations while a command is running (including timed-out commands still completing in background)
 3. **Cross-session state transition via snapshots**:
    - Session handoff and recovery are done through snapshot create/restore
    - Filesystem, working directory, and environment state are portable checkpoint data
@@ -26,13 +26,16 @@ A lightweight, in-memory virtual filesystem and shell for AI agents. Zero extern
 
 ## Non-goals / Constraints
 - Shell intentionally does not support pipes, command chaining (`||`), or stdin redirection.
-- Phase 1 does not provide parallel command execution in one sandbox instance.
+- Parallel command execution is not supported in one sandbox instance.
 
-## Integration Invariant: Single Active Executor per Sandbox
+## Integration Invariant: Single Owner, Controlled Multi-Thread Access
 - A sandbox instance is a single-agent execution lane.
-- Public integrations should avoid dispatching overlapping stateful core operations to the same sandbox.
+- Public integrations can dispatch from multiple threads, but should respect lane semantics:
+  - `ReadFileLines` can run concurrently with other reads.
+  - `WriteFile` and `ApplyPatch` serialize against reads/writes.
+  - `Execute`, `CreateSnapshot`, and `RestoreSnapshot` run as exclusive operations.
 - For parallel work, allocate separate sandbox instances via `SandboxManager`.
-- When this invariant is violated, the sandbox fails fast with deterministic errors instead of queuing or interleaving execution.
+- Conflicting command-lane overlaps fail fast with deterministic errors; file-lane overlaps are serialized.
 
 ## Design Outcome
 The system optimizes for simplicity, correctness, and reproducibility over broad API surface area: agents get just enough primitives to work effectively, and orchestration-level continuity is handled explicitly via snapshot-based state transfer.

@@ -8,29 +8,52 @@ namespace AgentSandbox.Tests;
 public class SandboxConcurrencyTests
 {
     [Fact]
-    public async Task WriteFile_WhenCommandIsInProgress_FailsFastWithDeterministicError()
+    public async Task ConcurrentReadFileLines_AllowedForSameSandbox()
     {
-        using var started = new ManualResetEventSlim(false);
-        using var release = new ManualResetEventSlim(false);
-        using var sandbox = new Sandbox(options: new SandboxOptions
+        using var sandbox = new Sandbox();
+        sandbox.WriteFile("/shared.txt", "line1\nline2\nline3");
+
+        using var start = new ManualResetEventSlim(false);
+        var read1 = Task.Run(() =>
         {
-            ShellExtensions = [new BlockingCommand(started, release)]
+            start.Wait(TimeSpan.FromSeconds(1));
+            return sandbox.ReadFileLines("/shared.txt", 1, null).ToArray();
+        });
+        var read2 = Task.Run(() =>
+        {
+            start.Wait(TimeSpan.FromSeconds(1));
+            return sandbox.ReadFileLines("/shared.txt", 2, null).ToArray();
         });
 
-        var commandTask = Task.Run(() => sandbox.Execute("block"));
-        try
-        {
-            Assert.True(started.Wait(TimeSpan.FromSeconds(1)));
+        start.Set();
+        await Task.WhenAll(read1, read2);
 
-            var ex = Assert.Throws<InvalidOperationException>(() => sandbox.WriteFile("/race.txt", "content"));
-            Assert.Contains("already in progress", ex.Message, StringComparison.OrdinalIgnoreCase);
-        }
-        finally
+        Assert.Equal(["line1", "line2", "line3"], read1.Result);
+        Assert.Equal(["line2", "line3"], read2.Result);
+    }
+
+    [Fact]
+    public async Task ConcurrentWriteFile_SerializedWithoutConflictErrors()
+    {
+        using var sandbox = new Sandbox();
+        using var start = new ManualResetEventSlim(false);
+
+        var write1 = Task.Run(() =>
         {
-            release.Set();
-            var result = await commandTask.WaitAsync(TimeSpan.FromSeconds(2));
-            Assert.True(result.Success);
-        }
+            start.Wait(TimeSpan.FromSeconds(1));
+            sandbox.WriteFile("/shared.txt", "first");
+        });
+        var write2 = Task.Run(() =>
+        {
+            start.Wait(TimeSpan.FromSeconds(1));
+            sandbox.WriteFile("/shared.txt", "second");
+        });
+
+        start.Set();
+        await Task.WhenAll(write1, write2);
+
+        var persisted = string.Join("\n", sandbox.ReadFileLines("/shared.txt"));
+        Assert.Contains(persisted, ["first", "second"]);
     }
 
     [Fact]
@@ -86,31 +109,6 @@ public class SandboxConcurrencyTests
         Assert.Null(ex);
 
         Assert.Throws<ObjectDisposedException>(() => sandbox.WriteFile("/after-dispose.txt", "blocked"));
-    }
-
-    private sealed class BlockingCommand : IShellCommand
-    {
-        private readonly ManualResetEventSlim _started;
-        private readonly ManualResetEventSlim _release;
-
-        public BlockingCommand(ManualResetEventSlim started, ManualResetEventSlim release)
-        {
-            _started = started;
-            _release = release;
-        }
-
-        public string Name => "block";
-        public string Description => "Blocks until released by test";
-
-        public ShellResult Execute(string[] args, IShellContext context)
-        {
-            _started.Set();
-            if (!_release.Wait(TimeSpan.FromSeconds(2)))
-            {
-                return ShellResult.Error("timeout waiting for test release");
-            }
-            return ShellResult.Ok("done");
-        }
     }
 
     private sealed class SlowCommand : IShellCommand
