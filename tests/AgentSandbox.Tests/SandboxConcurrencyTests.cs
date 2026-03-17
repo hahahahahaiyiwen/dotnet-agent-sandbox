@@ -16,12 +16,12 @@ public class SandboxConcurrencyTests
         using var start = new ManualResetEventSlim(false);
         var read1 = Task.Run(() =>
         {
-            start.Wait(TimeSpan.FromSeconds(1));
+            Assert.True(start.Wait(TimeSpan.FromSeconds(1)));
             return sandbox.ReadFileLines("/shared.txt", 1, null).ToArray();
         });
         var read2 = Task.Run(() =>
         {
-            start.Wait(TimeSpan.FromSeconds(1));
+            Assert.True(start.Wait(TimeSpan.FromSeconds(1)));
             return sandbox.ReadFileLines("/shared.txt", 2, null).ToArray();
         });
 
@@ -40,12 +40,12 @@ public class SandboxConcurrencyTests
 
         var write1 = Task.Run(() =>
         {
-            start.Wait(TimeSpan.FromSeconds(1));
+            Assert.True(start.Wait(TimeSpan.FromSeconds(1)));
             sandbox.WriteFile("/shared.txt", "first");
         });
         var write2 = Task.Run(() =>
         {
-            start.Wait(TimeSpan.FromSeconds(1));
+            Assert.True(start.Wait(TimeSpan.FromSeconds(1)));
             sandbox.WriteFile("/shared.txt", "second");
         });
 

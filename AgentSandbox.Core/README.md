@@ -33,7 +33,8 @@ A lightweight, in-memory virtual filesystem and shell for AI agents. Zero extern
 - Public integrations can dispatch from multiple threads, but should respect lane semantics:
   - `ReadFileLines` can run concurrently with other reads.
   - `WriteFile` and `ApplyPatch` serialize against reads/writes.
-  - `Execute`, `CreateSnapshot`, and `RestoreSnapshot` run as exclusive operations.
+  - `Execute` and `RestoreSnapshot` run as exclusive operations.
+  - `CreateSnapshot` runs as a file-read operation (concurrent with reads, serialized with writes).
 - For parallel work, allocate separate sandbox instances via `SandboxManager`.
 - Conflicting command-lane overlaps fail fast with deterministic errors; file-lane overlaps are serialized.
 

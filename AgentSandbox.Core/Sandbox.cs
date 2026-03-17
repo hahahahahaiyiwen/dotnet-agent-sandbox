@@ -226,7 +226,6 @@ public class Sandbox : IDisposable, IObservableSandbox
         EnterFileWriteLane();
         var stopwatch = Stopwatch.StartNew();
         Activity? activity = null;
-        var releaseFileWriteLane = true;
         var releaseOperationGate = true;
 
         try
@@ -271,10 +270,7 @@ public class Sandbox : IDisposable, IObservableSandbox
         }
         finally
         {
-            if (releaseFileWriteLane)
-            {
-                ExitFileWriteLane();
-            }
+            ExitFileWriteLane();
             if (releaseOperationGate)
             {
                 ExitOperationGate();
@@ -686,6 +682,7 @@ public class Sandbox : IDisposable, IObservableSandbox
     public IReadOnlyList<ShellResult> GetHistory()
     {
         ThrowIfDisposed();
+        ThrowIfTimedOutCommandInProgress();
         lock (_journalSync)
         {
             return _operationJournal.GetCommandHistoryProjection();
@@ -952,6 +949,7 @@ public class Sandbox : IDisposable, IObservableSandbox
         {
             _fileOperationLock.ExitWriteLock();
             ExitOperationGate();
+            _fileOperationLock.Dispose();
         }
     }
 
