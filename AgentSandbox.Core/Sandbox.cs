@@ -28,6 +28,7 @@ public class Sandbox : IDisposable, IObservableSandbox
     private readonly ISandboxEventEmitter _eventEmitter;
     private readonly SandboxOperationJournal _operationJournal;
     private readonly ReaderWriterLockSlim _fileOperationLock = new(LockRecursionPolicy.NoRecursion);
+    private readonly ReaderWriterLockSlim _isolatedCommandLock = new(LockRecursionPolicy.NoRecursion);
     private readonly object _journalSync = new();
     private readonly Action<string>? _onDisposed;
     private readonly Activity? _sandboxActivity;
@@ -222,6 +223,11 @@ public class Sandbox : IDisposable, IObservableSandbox
     /// </summary>
     public ShellResult Execute(string command)
     {
+        if (_options.EnableIsolatedParallelCommandExecution)
+        {
+            return ExecuteIsolatedParallel(command);
+        }
+
         EnterOperationGate();
         EnterFileWriteLane();
         var stopwatch = Stopwatch.StartNew();
@@ -274,6 +280,85 @@ public class Sandbox : IDisposable, IObservableSandbox
             if (releaseOperationGate)
             {
                 ExitOperationGate();
+            }
+            activity?.Dispose();
+        }
+    }
+
+    private ShellResult ExecuteIsolatedParallel(string command)
+    {
+        ThrowIfDisposed();
+        var stopwatch = Stopwatch.StartNew();
+        Activity? activity = null;
+
+        try
+        {
+            _isolatedCommandLock.EnterReadLock();
+            LastActivityAt = DateTime.UtcNow;
+            ValidateCommandInput(command);
+
+            activity = _telemetry.StartCommandActivity(command);
+            activity?.SetTag("command.cwd", _shell.CurrentDirectory);
+            activity?.SetTag("command.execution_mode", "isolated_parallel");
+            byte[] fileSystemSnapshot;
+            string currentDirectory;
+            Dictionary<string, string> environment;
+
+            EnterFileReadLane();
+            try
+            {
+                fileSystemSnapshot = _fileSystem.CreateSnapshot();
+                currentDirectory = _shell.CurrentDirectory;
+                environment = new Dictionary<string, string>(_shell.Environment, StringComparer.Ordinal);
+            }
+            finally
+            {
+                ExitFileReadLane();
+            }
+
+            var isolatedFileSystem = new FileSystem.FileSystem(new FileSystemOptions
+            {
+                MaxTotalSize = _options.MaxTotalSize,
+                MaxFileSize = _options.MaxFileSize,
+                MaxNodeCount = _options.MaxNodeCount
+            });
+            isolatedFileSystem.RestoreSnapshot(fileSystemSnapshot);
+
+            var executionTask = Task.Run(() => _shell.ExecuteIsolated(command, currentDirectory, environment, isolatedFileSystem));
+
+            if (!executionTask.Wait(_options.CommandTimeout))
+            {
+                stopwatch.Stop();
+                var timeoutResult = ShellResult.Error($"Command execution timed out after {_options.CommandTimeout.TotalMilliseconds} ms.");
+                timeoutResult.Command = command;
+                timeoutResult.Duration = stopwatch.Elapsed;
+                AppendShellOperation(timeoutResult);
+                _telemetry.RecordCommandError(new TimeoutException(timeoutResult.Stderr));
+                _telemetry.RecordSandboxExecuted(SandboxTelemetryHelper.GetCommandName(command), timeoutResult.ExitCode, timeoutResult.Duration);
+                return timeoutResult;
+            }
+
+            var result = executionTask.GetAwaiter().GetResult();
+            result = _shell.RedactSecrets(result);
+            AppendShellOperation(result);
+            stopwatch.Stop();
+
+            _telemetry.RecordCommandSuccess(command, result, stopwatch.Elapsed);
+            _telemetry.RecordSandboxExecuted(SandboxTelemetryHelper.GetCommandName(command), result.ExitCode, stopwatch.Elapsed);
+            return result;
+        }
+        catch (Exception ex)
+        {
+            stopwatch.Stop();
+            _telemetry.RecordCommandError(ex);
+            _telemetry.RecordSandboxExecuted(SandboxTelemetryHelper.GetCommandName(command), -1, stopwatch.Elapsed);
+            throw;
+        }
+        finally
+        {
+            if (_isolatedCommandLock.IsReadLockHeld)
+            {
+                _isolatedCommandLock.ExitReadLock();
             }
             activity?.Dispose();
         }
@@ -649,6 +734,7 @@ public class Sandbox : IDisposable, IObservableSandbox
     public void RestoreSnapshot(SandboxSnapshot snapshot)
     {
         EnterOperationGate();
+        _isolatedCommandLock.EnterWriteLock();
         EnterFileWriteLane();
         try
         {
@@ -666,6 +752,7 @@ public class Sandbox : IDisposable, IObservableSandbox
         finally
         {
             ExitFileWriteLane();
+            _isolatedCommandLock.ExitWriteLock();
             ExitOperationGate();
         }
     }
@@ -889,6 +976,7 @@ public class Sandbox : IDisposable, IObservableSandbox
 
     private void CompleteDisposeCleanup()
     {
+        _isolatedCommandLock.EnterWriteLock();
         _fileOperationLock.EnterWriteLock();
         try
         {
@@ -946,8 +1034,10 @@ public class Sandbox : IDisposable, IObservableSandbox
         finally
         {
             _fileOperationLock.ExitWriteLock();
+            _isolatedCommandLock.ExitWriteLock();
             ExitOperationGate();
             _fileOperationLock.Dispose();
+            _isolatedCommandLock.Dispose();
         }
     }
 

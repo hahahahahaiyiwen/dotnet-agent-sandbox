@@ -111,6 +111,67 @@ public class SandboxConcurrencyTests
         Assert.Throws<ObjectDisposedException>(() => sandbox.WriteFile("/after-dispose.txt", "blocked"));
     }
 
+    [Fact]
+    public async Task Execute_WhenIsolatedParallelEnabled_AllowsConcurrentCommands()
+    {
+        using var sandbox = new Sandbox(options: new SandboxOptions
+        {
+            EnableIsolatedParallelCommandExecution = true,
+            ShellExtensions = [new ParallelSafeSlowCommand()]
+        });
+
+        using var start = new ManualResetEventSlim(false);
+        var sw = Stopwatch.StartNew();
+        var t1 = Task.Run(() =>
+        {
+            Assert.True(start.Wait(TimeSpan.FromSeconds(1)));
+            return sandbox.Execute("pslow 250");
+        });
+        var t2 = Task.Run(() =>
+        {
+            Assert.True(start.Wait(TimeSpan.FromSeconds(1)));
+            return sandbox.Execute("pslow 250");
+        });
+
+        start.Set();
+        var results = await Task.WhenAll(t1, t2);
+        sw.Stop();
+
+        Assert.All(results, r => Assert.True(r.Success, r.Stderr));
+        Assert.True(sw.Elapsed < TimeSpan.FromMilliseconds(450), $"Expected concurrent execution, elapsed={sw.ElapsedMilliseconds}ms");
+    }
+
+    [Fact]
+    public void Execute_WhenIsolatedParallelEnabled_DoesNotPersistCommandLocalEnvironment()
+    {
+        using var sandbox = new Sandbox(options: new SandboxOptions
+        {
+            EnableIsolatedParallelCommandExecution = true
+        });
+
+        var setResult = sandbox.Execute("export PHASE3_VAR=ok && echo $PHASE3_VAR");
+        Assert.True(setResult.Success);
+        Assert.Contains("ok", setResult.Stdout, StringComparison.Ordinal);
+
+        var snapshot = sandbox.CreateSnapshot();
+        Assert.False(snapshot.Environment.ContainsKey("PHASE3_VAR"));
+    }
+
+    [Fact]
+    public void Execute_WhenIsolatedParallelEnabled_RejectsNonParallelSafeExtensions()
+    {
+        using var sandbox = new Sandbox(options: new SandboxOptions
+        {
+            EnableIsolatedParallelCommandExecution = true,
+            ShellExtensions = [new NonParallelSafeCommand()]
+        });
+
+        var result = sandbox.Execute("unsafe");
+
+        Assert.False(result.Success);
+        Assert.Contains("Parallel isolated execution is not supported", result.Stderr, StringComparison.OrdinalIgnoreCase);
+    }
+
     private sealed class SlowCommand : IShellCommand
     {
         public string Name => "slow";
@@ -121,6 +182,30 @@ public class SandboxConcurrencyTests
             var delayMs = int.Parse(args[0]);
             Thread.Sleep(delayMs);
             return ShellResult.Ok("done");
+        }
+    }
+
+    private sealed class ParallelSafeSlowCommand : IParallelSafeShellCommand
+    {
+        public string Name => "pslow";
+        public string Description => "Sleeps for the given milliseconds.";
+
+        public ShellResult Execute(string[] args, IShellContext context)
+        {
+            var delayMs = int.Parse(args[0]);
+            Thread.Sleep(delayMs);
+            return ShellResult.Ok("done");
+        }
+    }
+
+    private sealed class NonParallelSafeCommand : IShellCommand
+    {
+        public string Name => "unsafe";
+        public string Description => "Not marked as parallel safe.";
+
+        public ShellResult Execute(string[] args, IShellContext context)
+        {
+            return ShellResult.Ok("unsafe");
         }
     }
 

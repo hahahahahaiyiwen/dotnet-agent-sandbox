@@ -294,6 +294,45 @@ public class SandboxShell : IShellContext, ISandboxShellHost
     }
 
     /// <summary>
+    /// Executes a command in an isolated shell context while sharing the same filesystem.
+    /// The caller must provide the baseline cwd/environment snapshot to isolate command-local mutations.
+    /// </summary>
+    internal ShellResult ExecuteIsolated(
+        string commandLine,
+        string currentDirectory,
+        IReadOnlyDictionary<string, string> environment,
+        IFileSystem? fileSystemOverride = null)
+    {
+        var isolatedShell = new SandboxShell(fileSystemOverride ?? _fs, _secretBroker, _secretPolicy);
+
+        foreach (var command in _extensionCommands.Values.Distinct())
+        {
+            if (!IsParallelSafeExtension(command))
+            {
+                return ShellResult.Error(
+                    $"Parallel isolated execution is not supported for extension command '{command.Name}'. " +
+                    $"Implement {nameof(IParallelSafeShellCommand)} to opt in.");
+            }
+        }
+
+        foreach (var command in _extensionCommands.Values.Distinct())
+        {
+            isolatedShell.RegisterCommand(command);
+        }
+
+        foreach (var kvp in environment)
+        {
+            ((IShellContext)isolatedShell).Environment[kvp.Key] = kvp.Value;
+        }
+
+        isolatedShell.CurrentDirectory = currentDirectory;
+        ((IShellContext)isolatedShell).Environment["PWD"] = isolatedShell.CurrentDirectory;
+
+        var result = isolatedShell.Execute(commandLine);
+        return isolatedShell.RedactSecrets(result);
+    }
+
+    /// <summary>
     /// Registers a shell command extension.
     /// </summary>
     public void RegisterCommand(IShellCommand command)
@@ -559,6 +598,11 @@ public class SandboxShell : IShellContext, ISandboxShellHost
         }
 
         return (result, stdoutForAggregation, stderrForAggregation);
+    }
+
+    private static bool IsParallelSafeExtension(IShellCommand command)
+    {
+        return command is IParallelSafeShellCommand;
     }
 
     #region Private Methods - Command Parsing
