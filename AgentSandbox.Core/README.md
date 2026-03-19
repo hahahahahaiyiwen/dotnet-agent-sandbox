@@ -33,16 +33,19 @@ A lightweight, in-memory virtual filesystem and shell for AI agents. Zero extern
 - Public integrations can dispatch from multiple threads, but should respect lane semantics:
   - `ReadFileLines` can run concurrently with other reads.
   - `WriteFile` and `ApplyPatch` serialize against reads/writes.
-  - `Execute` and `RestoreSnapshot` run as exclusive operations.
+  - `Execute` is exclusive by default; when `EnableIsolatedParallelCommandExecution` is enabled, isolated command executions can overlap.
+  - `RestoreSnapshot` remains exclusive.
   - `CreateSnapshot` runs as a file-read operation (concurrent with reads, serialized with writes).
-- For parallel work, allocate separate sandbox instances via `SandboxManager`.
+- For high parallel throughput with persistent mutations, allocate separate sandbox instances via `SandboxManager`.
 - Conflicting command-lane overlaps fail fast with deterministic errors; file-lane overlaps are serialized.
 
 ## Phase 3 Optional Isolated Parallel Execute
 - Enable with `SandboxOptions.EnableIsolatedParallelCommandExecution = true`.
 - In this mode, `Execute` runs commands in isolated shell contexts with filesystem snapshots.
 - Command-local cwd/environment/session cache mutations are isolated and are not written back to the primary sandbox shell context.
+- Filesystem mutations made by isolated commands are also isolated and discarded after command completion.
 - Shell extensions must implement `IParallelSafeShellCommand`; otherwise execution fails fast with actionable diagnostics.
+- Timed-out isolated commands are tracked and quarantined until completion to preserve lifecycle safety.
 - `RestoreSnapshot` and disposal still take exclusive coordination locks to preserve deterministic lifecycle behavior.
 
 ## Design Outcome

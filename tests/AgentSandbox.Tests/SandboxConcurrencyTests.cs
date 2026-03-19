@@ -114,14 +114,14 @@ public class SandboxConcurrencyTests
     [Fact]
     public async Task Execute_WhenIsolatedParallelEnabled_AllowsConcurrentCommands()
     {
+        var overlap = new OverlapTracker();
         using var sandbox = new Sandbox(options: new SandboxOptions
         {
             EnableIsolatedParallelCommandExecution = true,
-            ShellExtensions = [new ParallelSafeSlowCommand()]
+            ShellExtensions = [new ParallelSafeSlowCommand(overlap)]
         });
 
         using var start = new ManualResetEventSlim(false);
-        var sw = Stopwatch.StartNew();
         var t1 = Task.Run(() =>
         {
             Assert.True(start.Wait(TimeSpan.FromSeconds(1)));
@@ -135,10 +135,9 @@ public class SandboxConcurrencyTests
 
         start.Set();
         var results = await Task.WhenAll(t1, t2);
-        sw.Stop();
 
         Assert.All(results, r => Assert.True(r.Success, r.Stderr));
-        Assert.True(sw.Elapsed < TimeSpan.FromMilliseconds(450), $"Expected concurrent execution, elapsed={sw.ElapsedMilliseconds}ms");
+        Assert.True(overlap.ObservedOverlap, "Expected overlapping isolated command execution.");
     }
 
     [Fact]
@@ -187,14 +186,29 @@ public class SandboxConcurrencyTests
 
     private sealed class ParallelSafeSlowCommand : IParallelSafeShellCommand
     {
+        private readonly OverlapTracker? _overlap;
+
+        public ParallelSafeSlowCommand(OverlapTracker? overlap = null)
+        {
+            _overlap = overlap;
+        }
+
         public string Name => "pslow";
         public string Description => "Sleeps for the given milliseconds.";
 
         public ShellResult Execute(string[] args, IShellContext context)
         {
             var delayMs = int.Parse(args[0]);
-            Thread.Sleep(delayMs);
-            return ShellResult.Ok("done");
+            _overlap?.Enter();
+            try
+            {
+                Thread.Sleep(delayMs);
+                return ShellResult.Ok("done");
+            }
+            finally
+            {
+                _overlap?.Exit();
+            }
         }
     }
 
@@ -213,5 +227,26 @@ public class SandboxConcurrencyTests
     {
         return ex.Message.Contains("timed-out command", StringComparison.OrdinalIgnoreCase) ||
                ex.Message.Contains("already in progress", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private sealed class OverlapTracker
+    {
+        private int _active;
+
+        public bool ObservedOverlap { get; private set; }
+
+        public void Enter()
+        {
+            var active = Interlocked.Increment(ref _active);
+            if (active > 1)
+            {
+                ObservedOverlap = true;
+            }
+        }
+
+        public void Exit()
+        {
+            Interlocked.Decrement(ref _active);
+        }
     }
 }

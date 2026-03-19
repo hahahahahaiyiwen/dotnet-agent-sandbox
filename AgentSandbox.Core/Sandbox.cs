@@ -288,6 +288,7 @@ public class Sandbox : IDisposable, IObservableSandbox
     private ShellResult ExecuteIsolatedParallel(string command)
     {
         ThrowIfDisposed();
+        ThrowIfTimedOutCommandInProgress();
         var stopwatch = Stopwatch.StartNew();
         Activity? activity = null;
 
@@ -335,13 +336,15 @@ public class Sandbox : IDisposable, IObservableSandbox
                 AppendShellOperation(timeoutResult);
                 _telemetry.RecordCommandError(new TimeoutException(timeoutResult.Stderr));
                 _telemetry.RecordSandboxExecuted(SandboxTelemetryHelper.GetCommandName(command), timeoutResult.ExitCode, timeoutResult.Duration);
+                TrackTimedOutIsolatedCommand(executionTask);
                 return timeoutResult;
             }
 
             var result = executionTask.GetAwaiter().GetResult();
             result = _shell.RedactSecrets(result);
-            AppendShellOperation(result);
             stopwatch.Stop();
+            result.Duration = stopwatch.Elapsed;
+            AppendShellOperation(result);
 
             _telemetry.RecordCommandSuccess(command, result, stopwatch.Elapsed);
             _telemetry.RecordSandboxExecuted(SandboxTelemetryHelper.GetCommandName(command), result.ExitCode, stopwatch.Elapsed);
@@ -920,6 +923,21 @@ public class Sandbox : IDisposable, IObservableSandbox
         }, this, CancellationToken.None, TaskContinuationOptions.ExecuteSynchronously, TaskScheduler.Default);
     }
 
+    private void TrackTimedOutIsolatedCommand(Task<ShellResult> executionTask)
+    {
+        Volatile.Write(ref _timedOutCommandTask, executionTask);
+        executionTask.ContinueWith(static (task, state) =>
+        {
+            var sandbox = (Sandbox)state!;
+            if (task.Status == TaskStatus.Faulted && task.Exception is not null)
+            {
+                sandbox._telemetry.RecordCommandError(task.Exception.GetBaseException());
+            }
+
+            Volatile.Write(ref sandbox._timedOutCommandTask, null);
+        }, this, CancellationToken.None, TaskContinuationOptions.ExecuteSynchronously, TaskScheduler.Default);
+    }
+
     private SandboxStats BuildStatsUnsafe()
     {
         int commandCount;
@@ -967,6 +985,14 @@ public class Sandbox : IDisposable, IObservableSandbox
 
         if (TryEnterDisposeGate(TimeSpan.FromSeconds(5)))
         {
+            var timedOutTask = Volatile.Read(ref _timedOutCommandTask);
+            if (timedOutTask is not null && !timedOutTask.IsCompleted)
+            {
+                ExitOperationGate();
+                ScheduleDeferredCleanup();
+                return;
+            }
+
             CompleteDisposeCleanup();
             return;
         }
@@ -1054,14 +1080,8 @@ public class Sandbox : IDisposable, IObservableSandbox
             {
                 while (Volatile.Read(ref _cleanupCompleted) == 0)
                 {
-                    if (TryEnterDisposeGate(TimeSpan.FromMilliseconds(100)))
-                    {
-                        CompleteDisposeCleanup();
-                        return;
-                    }
-
                     var timedOutTask = Volatile.Read(ref _timedOutCommandTask);
-                    if (timedOutTask is not null)
+                    if (timedOutTask is not null && !timedOutTask.IsCompleted)
                     {
                         try
                         {
@@ -1069,13 +1089,19 @@ public class Sandbox : IDisposable, IObservableSandbox
                         }
                         catch
                         {
-                            // ignore and retry gate acquisition
+                            // ignore and retry
                         }
+
+                        continue;
                     }
-                    else
+
+                    if (TryEnterDisposeGate(TimeSpan.FromMilliseconds(100)))
                     {
-                        Thread.Sleep(50);
+                        CompleteDisposeCleanup();
+                        return;
                     }
+
+                    Thread.Sleep(50);
                 }
             }
             finally

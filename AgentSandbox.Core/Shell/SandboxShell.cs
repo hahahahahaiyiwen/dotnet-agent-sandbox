@@ -294,8 +294,8 @@ public class SandboxShell : IShellContext, ISandboxShellHost
     }
 
     /// <summary>
-    /// Executes a command in an isolated shell context while sharing the same filesystem.
-    /// The caller must provide the baseline cwd/environment snapshot to isolate command-local mutations.
+    /// Executes a command in an isolated shell context.
+    /// The caller provides baseline cwd/environment and may provide a filesystem override (for snapshot-isolated execution).
     /// </summary>
     internal ShellResult ExecuteIsolated(
         string commandLine,
