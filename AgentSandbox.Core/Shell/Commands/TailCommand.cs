@@ -45,7 +45,8 @@ public class TailCommand : IShellCommand
         var output = new StringBuilder();
         foreach (var p in paths)
         {
-            var path = context.ResolvePath(p);
+            if (!ShellCommandFileGuards.TryResolveReadableFilePath(context, Name, p, out var path, out var errorMessage))
+                return ShellResult.Error(errorMessage);
             
             // Use ring buffer to keep last N lines - avoids full string[] allocation
             var buffer = new string[maxLines];

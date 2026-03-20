@@ -23,18 +23,28 @@ public class WcCommand : IShellCommand
 
         foreach (var p in paths)
         {
-            var path = context.ResolvePath(p);
+            if (!ShellCommandFileGuards.TryResolveReadableFilePath(context, Name, p, out var path, out var errorMessage))
+                return ShellResult.Error(errorMessage);
+
             var fileBytes = context.FileSystem.ReadFileBytes(path);
+            var fileContent = Encoding.UTF8.GetString(fileBytes);
+            var normalized = fileContent.Replace("\r\n", "\n").Replace("\r", "\n");
+            var linesSpan = normalized.AsSpan();
             var lines = 0;
             var words = 0;
             var byteCount = fileBytes.Length;
             var inWord = false;
-            
-            foreach (var line in context.FileSystem.ReadFileLines(path))
-            {
-                lines++;
 
-                foreach (var c in line.AsSpan())
+            var lineStart = 0;
+            for (var i = 0; i < linesSpan.Length; i++)
+            {
+                if (linesSpan[i] != '\n')
+                    continue;
+
+                lines++;
+                var line = linesSpan[lineStart..i];
+
+                foreach (var c in line)
                 {
                     if (char.IsWhiteSpace(c))
                     {
@@ -49,6 +59,25 @@ public class WcCommand : IShellCommand
 
                 // Newline between lines is a word boundary.
                 inWord = false;
+                lineStart = i + 1;
+            }
+
+            if (lineStart < linesSpan.Length)
+            {
+                lines++;
+                var line = linesSpan[lineStart..];
+                foreach (var c in line)
+                {
+                    if (char.IsWhiteSpace(c))
+                    {
+                        inWord = false;
+                    }
+                    else if (!inWord)
+                    {
+                        inWord = true;
+                        words++;
+                    }
+                }
             }
             
             output.AppendLine($"  {lines,6}  {words,6}  {byteCount,6} {p}");

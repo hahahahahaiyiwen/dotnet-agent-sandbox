@@ -39,7 +39,8 @@ public class HeadCommand : IShellCommand
         var output = new StringBuilder();
         foreach (var p in paths)
         {
-            var path = context.ResolvePath(p);
+            if (!ShellCommandFileGuards.TryResolveReadableFilePath(context, Name, p, out var path, out var errorMessage))
+                return ShellResult.Error(errorMessage);
             
             var count = 0;
             foreach (var line in context.FileSystem.ReadFileLines(path, endLine: maxLines + 1))

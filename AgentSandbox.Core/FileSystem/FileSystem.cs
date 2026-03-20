@@ -511,20 +511,14 @@ public class FileSystem : IFileSystem, ISnapshotableFileSystem, IFileSystemStats
             return;
         }
 
-        var rollbackSnapshot = CreateSnapshot();
-        try
+        ExecuteWithRollback(() =>
         {
             CreateDirectory(destination);
             foreach (var child in ListDirectory(source))
             {
                 Copy(FileSystemPath.Combine(source, child), FileSystemPath.Combine(destination, child), overwrite);
             }
-        }
-        catch
-        {
-            RestoreSnapshot(rollbackSnapshot);
-            throw;
-        }
+        });
     }
 
     /// <inheritdoc />
@@ -535,16 +529,32 @@ public class FileSystem : IFileSystem, ISnapshotableFileSystem, IFileSystemStats
         
         var sourceEntry = _storage.Get(source);
         var isDirectory = sourceEntry?.IsDirectory ?? false;
-        
-        Copy(source, destination, overwrite);
-        Delete(source, recursive: true);
-        
-        Renamed?.Invoke(this, new FileSystemRenamedEventArgs(source, destination, isDirectory));
+
+        ExecuteWithRollback(() =>
+        {
+            Copy(source, destination, overwrite);
+            Delete(source, recursive: true);
+            Renamed?.Invoke(this, new FileSystemRenamedEventArgs(source, destination, isDirectory));
+        });
     }
 
     #endregion
 
     #region ISnapshotableFileSystem
+
+    private void ExecuteWithRollback(Action action)
+    {
+        var rollbackSnapshot = CreateSnapshot();
+        try
+        {
+            action();
+        }
+        catch
+        {
+            RestoreSnapshot(rollbackSnapshot);
+            throw;
+        }
+    }
     
     /// <inheritdoc />
     public byte[] CreateSnapshot()
