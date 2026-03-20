@@ -10,8 +10,8 @@ A lightweight, in-memory virtual filesystem and shell for AI agents. Zero extern
    - `ApplyPatch(path, patch)` for incremental context-aware edits
 2. **One agent-session = one sandbox instance**:
    - Single-owner model by design
-   - Phase 2 concurrency model allows concurrent file reads while serializing file writes
-   - `Execute` remains exclusive and blocks overlapping stateful operations while a command is running (including timed-out commands still completing in background)
+   - Phase 2 baseline allows concurrent file reads while serializing file writes
+   - Phase 3 adds optional isolated parallel command execution via `SandboxOptions.EnableIsolatedParallelCommandExecution`
 3. **Cross-session state transition via snapshots**:
    - Session handoff and recovery are done through snapshot create/restore
    - Filesystem, working directory, and environment state are portable checkpoint data
@@ -26,17 +26,27 @@ A lightweight, in-memory virtual filesystem and shell for AI agents. Zero extern
 
 ## Non-goals / Constraints
 - Shell intentionally does not support pipes, command chaining (`||`), or stdin redirection.
-- Parallel command execution is not supported in one sandbox instance.
+- Parallel command execution is off by default and remains opt-in.
 
 ## Integration Invariant: Single Owner, Controlled Multi-Thread Access
 - A sandbox instance is a single-agent execution lane.
 - Public integrations can dispatch from multiple threads, but should respect lane semantics:
   - `ReadFileLines` can run concurrently with other reads.
   - `WriteFile` and `ApplyPatch` serialize against reads/writes.
-  - `Execute` and `RestoreSnapshot` run as exclusive operations.
+  - `Execute` is exclusive by default; when `EnableIsolatedParallelCommandExecution` is enabled, isolated command executions can overlap.
+  - `RestoreSnapshot` remains exclusive.
   - `CreateSnapshot` runs as a file-read operation (concurrent with reads, serialized with writes).
-- For parallel work, allocate separate sandbox instances via `SandboxManager`.
+- For high parallel throughput with persistent mutations, allocate separate sandbox instances via `SandboxManager`.
 - Conflicting command-lane overlaps fail fast with deterministic errors; file-lane overlaps are serialized.
+
+## Phase 3 Optional Isolated Parallel Execute
+- Enable with `SandboxOptions.EnableIsolatedParallelCommandExecution = true`.
+- In this mode, `Execute` runs commands in isolated shell contexts with filesystem snapshots.
+- Command-local cwd/environment/session cache mutations are isolated and are not written back to the primary sandbox shell context.
+- Filesystem mutations made by isolated commands are confined to throwaway filesystem copies and do not affect the primary sandbox filesystem.
+- Shell extensions must implement `IParallelSafeShellCommand`; otherwise execution fails fast with actionable diagnostics.
+- Timed-out isolated commands are tracked and quarantined until completion to preserve lifecycle safety.
+- `RestoreSnapshot` and disposal still take exclusive coordination locks to preserve deterministic lifecycle behavior.
 
 ## Design Outcome
 The system optimizes for simplicity, correctness, and reproducibility over broad API surface area: agents get just enough primitives to work effectively, and orchestration-level continuity is handled explicitly via snapshot-based state transfer.

@@ -467,11 +467,13 @@ sandbox1.Dispose();
 
 To enable automatic cleanup of inactive sandboxes, configure `SandboxManagerOptions.CleanupInterval` and `InactivityTimeout`.
 
-## Integration Invariant: Single Active Executor per Sandbox
+## Integration Invariant: Single Owner, Controlled Multi-Thread Access
 
 - Treat each sandbox instance as a single-agent execution context.
-- Do not run overlapping `Execute(...)` operations against the same sandbox instance.
-- For concurrency, create separate sandbox instances with `SandboxManager`.
+- Default mode keeps `Execute(...)` exclusive on a sandbox instance.
+- Optional Phase 3 mode (`EnableIsolatedParallelCommandExecution = true`) allows overlapping `Execute(...)` calls in isolated command contexts.
+- In isolated mode, command-local cwd/environment/session-cache and filesystem mutations are not written back to the primary sandbox state.
+- For high-throughput parallel work that must persist command mutations, create separate sandbox instances with `SandboxManager`.
 
 ## Use Cases
 

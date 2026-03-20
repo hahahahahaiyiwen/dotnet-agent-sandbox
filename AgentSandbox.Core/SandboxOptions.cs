@@ -28,6 +28,12 @@ public class SandboxOptions
     /// <summary>Command execution timeout (default: 30 seconds).</summary>
     public TimeSpan CommandTimeout { get; set; } = TimeSpan.FromSeconds(30);
 
+    /// <summary>
+    /// Enables Phase 3 opt-in parallel command execution using isolated shell contexts.
+    /// Default is false to preserve deterministic single-executor behavior.
+    /// </summary>
+    public bool EnableIsolatedParallelCommandExecution { get; set; }
+
     /// <summary>Maximum UTF-8 payload size for Execute command input in bytes (default: 8KB).</summary>
     public int MaxCommandLength
     {
@@ -121,6 +127,7 @@ public class SandboxOptions
         MaxFileSize = MaxFileSize,
         MaxNodeCount = MaxNodeCount,
         CommandTimeout = CommandTimeout,
+        EnableIsolatedParallelCommandExecution = EnableIsolatedParallelCommandExecution,
         MaxCommandLength = MaxCommandLength,
         MaxWritePayloadBytes = MaxWritePayloadBytes,
         Environment = new Dictionary<string, string>(Environment),
