@@ -36,10 +36,17 @@ public class TailCommand : IShellCommand
         if (paths.Count == 0)
             return ShellResult.Error("tail: missing file operand");
 
+        if (maxLines < 0)
+            return ShellResult.Error("tail: invalid number of lines");
+
+        if (maxLines == 0)
+            return ShellResult.Ok(string.Empty);
+
         var output = new StringBuilder();
         foreach (var p in paths)
         {
-            var path = context.ResolvePath(p);
+            if (!ShellCommandFileGuards.TryResolveReadableFilePath(context, Name, p, out var path, out var errorMessage))
+                return ShellResult.Error(errorMessage);
             
             // Use ring buffer to keep last N lines - avoids full string[] allocation
             var buffer = new string[maxLines];

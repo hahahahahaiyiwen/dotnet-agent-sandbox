@@ -63,6 +63,27 @@ public class SandboxShellTests
     }
 
     [Fact]
+    public void Mkdir_ExistingDirectoryWithoutP_Fails()
+    {
+        _fs.CreateDirectory("/existing");
+
+        var result = _shell.Execute("mkdir /existing");
+
+        Assert.False(result.Success);
+        Assert.Contains("File exists", result.Stderr, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Mkdir_ExistingDirectoryWithP_Succeeds()
+    {
+        _fs.CreateDirectory("/existing");
+
+        var result = _shell.Execute("mkdir -p /existing");
+
+        Assert.True(result.Success);
+    }
+
+    [Fact]
     public void Touch_CreatesEmptyFile()
     {
         var result = _shell.Execute("touch /newfile.txt");
@@ -91,6 +112,19 @@ public class SandboxShellTests
         
         Assert.True(result.Success);
         Assert.Equal("file content", result.Stdout);
+    }
+
+    [Fact]
+    public void Cat_MultipleFiles_KeepsPriorOutputBeforeFailure()
+    {
+        _fs.WriteFile("/a.txt", "A");
+        _fs.WriteFile("/c.txt", "C");
+
+        var result = _shell.Execute("cat /a.txt /missing.txt /c.txt");
+
+        Assert.False(result.Success);
+        Assert.Equal("A", result.Stdout);
+        Assert.Contains("missing.txt", result.Stderr, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -143,6 +177,30 @@ public class SandboxShellTests
     }
 
     [Fact]
+    public void Cp_SourceEqualsDestination_ReturnsError()
+    {
+        _fs.WriteFile("/same.txt", "content");
+
+        var result = _shell.Execute("cp /same.txt /same.txt");
+
+        Assert.False(result.Success);
+        Assert.Contains("Destination already exists", result.Stderr, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Cp_MultipleSources_LaterFailure_KeepsEarlierCopiedFile()
+    {
+        _fs.WriteFile("/s1.txt", "one");
+        _fs.CreateDirectory("/dest");
+
+        var result = _shell.Execute("cp /s1.txt /missing.txt /dest");
+
+        Assert.False(result.Success);
+        Assert.True(_fs.Exists("/dest/s1.txt"));
+        Assert.Contains("missing.txt", result.Stderr, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Mv_MovesFile()
     {
         _fs.WriteFile("/old.txt", "content");
@@ -152,6 +210,17 @@ public class SandboxShellTests
         Assert.True(result.Success);
         Assert.False(_fs.Exists("/old.txt"));
         Assert.True(_fs.Exists("/new.txt"));
+    }
+
+    [Fact]
+    public void Mv_SourceEqualsDestination_ReturnsError()
+    {
+        _fs.WriteFile("/same.txt", "content");
+
+        var result = _shell.Execute("mv /same.txt /same.txt");
+
+        Assert.False(result.Success);
+        Assert.Contains("Destination already exists", result.Stderr, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -168,6 +237,17 @@ public class SandboxShellTests
     }
 
     [Fact]
+    public void Head_FileShorterThanRequestedLines_ReturnsAllLines()
+    {
+        _fs.WriteFile("/short.txt", "line1\nline2");
+
+        var result = _shell.Execute("head -n 10 /short.txt");
+
+        Assert.True(result.Success);
+        Assert.Equal("line1\nline2", result.Stdout.Replace("\r\n", "\n"));
+    }
+
+    [Fact]
     public void Tail_ShowsLastLines()
     {
         _fs.WriteFile("/lines.txt", "line1\nline2\nline3\nline4\nline5");
@@ -181,6 +261,57 @@ public class SandboxShellTests
     }
 
     [Fact]
+    public void Tail_FileShorterThanRequestedLines_ReturnsAllLines()
+    {
+        _fs.WriteFile("/short.txt", "line1\nline2");
+
+        var result = _shell.Execute("tail -n 10 /short.txt");
+
+        Assert.True(result.Success);
+        Assert.Equal("line1\nline2", result.Stdout.Replace("\r\n", "\n"));
+    }
+
+    [Fact]
+    public void Tail_ZeroLines_ReturnsEmptyOutput()
+    {
+        _fs.WriteFile("/lines.txt", "line1\nline2\nline3");
+
+        var result = _shell.Execute("tail -n 0 /lines.txt");
+
+        Assert.True(result.Success);
+        Assert.Equal(string.Empty, result.Stdout);
+    }
+
+    [Fact]
+    public void Head_MissingFileOperand_ReturnsContractError()
+    {
+        var result = _shell.Execute("head");
+
+        Assert.False(result.Success);
+        Assert.Contains("head: missing file operand", result.Stderr, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Tail_MissingFileOperand_ReturnsContractError()
+    {
+        var result = _shell.Execute("tail");
+
+        Assert.False(result.Success);
+        Assert.Contains("tail: missing file operand", result.Stderr, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Tail_InvalidNegativeN_ReturnsContractError()
+    {
+        _fs.WriteFile("/lines.txt", "line1\nline2");
+
+        var result = _shell.Execute("tail -n -2 /lines.txt");
+
+        Assert.False(result.Success);
+        Assert.Contains("tail: invalid number of lines", result.Stderr, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Grep_FindsMatchingLines()
     {
         _fs.WriteFile("/search.txt", "apple\nbanana\napricot\ncherry");
@@ -191,6 +322,27 @@ public class SandboxShellTests
         Assert.Contains("apple", result.Stdout);
         Assert.Contains("apricot", result.Stdout);
         Assert.DoesNotContain("banana", result.Stdout);
+    }
+
+    [Fact]
+    public void Grep_EmptyPattern_MatchesAllLines()
+    {
+        _fs.WriteFile("/all.txt", "one\ntwo\nthree");
+
+        var result = _shell.Execute("grep \"\" /all.txt");
+
+        Assert.True(result.Success);
+        var lines = result.Stdout.Split('\n', StringSplitOptions.RemoveEmptyEntries);
+        Assert.Equal(3, lines.Length);
+    }
+
+    [Fact]
+    public void Grep_MissingPatternOrFile_ReturnsContractError()
+    {
+        var result = _shell.Execute("grep");
+
+        Assert.False(result.Success);
+        Assert.Contains("grep: missing pattern or file", result.Stderr, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -463,6 +615,194 @@ public class SandboxShellTests
         Assert.True(result.Success);
         Assert.True(long.TryParse(result.Stdout, out var timestamp));
         Assert.True(timestamp > 0);
+    }
+
+    [Fact]
+    public void Env_ListsVariablesInSortedOrder()
+    {
+        ((IShellContext)_shell).Environment["Z_VAR"] = "last";
+        ((IShellContext)_shell).Environment["A_VAR"] = "first";
+
+        var result = _shell.Execute("env");
+
+        Assert.True(result.Success);
+        var lines = result.Stdout.Split('\n', StringSplitOptions.RemoveEmptyEntries);
+        var aIndex = Array.FindIndex(lines, l => l.StartsWith("A_VAR=", StringComparison.Ordinal));
+        var zIndex = Array.FindIndex(lines, l => l.StartsWith("Z_VAR=", StringComparison.Ordinal));
+        Assert.True(aIndex >= 0 && zIndex >= 0);
+        Assert.True(aIndex < zIndex);
+    }
+
+    [Fact]
+    public void Wc_MissingOperand_ReturnsError()
+    {
+        var result = _shell.Execute("wc");
+
+        Assert.False(result.Success);
+        Assert.Contains("missing file operand", result.Stderr, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Wc_MultipleFiles_ReportsTotalLine()
+    {
+        _fs.WriteFile("/a.txt", "one\ntwo");
+        _fs.WriteFile("/b.txt", "three");
+
+        var result = _shell.Execute("wc /a.txt /b.txt");
+
+        Assert.True(result.Success);
+        Assert.Contains("/a.txt", result.Stdout, StringComparison.Ordinal);
+        Assert.Contains("/b.txt", result.Stdout, StringComparison.Ordinal);
+        Assert.Contains("total", result.Stdout, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Wc_HandlesWindowsLineEndings()
+    {
+        _fs.WriteFile("/windows.txt", "alpha\r\nbeta\r\ngamma");
+
+        var result = _shell.Execute("wc /windows.txt");
+
+        Assert.True(result.Success);
+        Assert.Contains("3", result.Stdout, StringComparison.Ordinal);
+        Assert.Contains("/windows.txt", result.Stdout, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Find_WithRelativePath_UsesCurrentDirectory()
+    {
+        _fs.WriteFile("/work/src/a.cs", "x");
+        _fs.WriteFile("/work/src/a.txt", "x");
+        _shell.Execute("cd /work");
+
+        var result = _shell.Execute("find src -name *.cs");
+
+        Assert.True(result.Success);
+        Assert.Contains("/work/src/a.cs", result.Stdout, StringComparison.Ordinal);
+        Assert.DoesNotContain("/work/src/a.txt", result.Stdout, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Find_WithoutNameFilter_ListsBaseAndChildren()
+    {
+        _fs.WriteFile("/root/child/file.txt", "x");
+
+        var result = _shell.Execute("find /root");
+
+        Assert.True(result.Success);
+        Assert.Contains("/root", result.Stdout, StringComparison.Ordinal);
+        Assert.Contains("/root/child", result.Stdout, StringComparison.Ordinal);
+        Assert.Contains("/root/child/file.txt", result.Stdout, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void RedirectAppend_AppendsMultipleCommandOutputs()
+    {
+        _shell.Execute("echo one > /out.txt");
+        _shell.Execute("echo two >> /out.txt");
+
+        var result = _shell.Execute("cat /out.txt");
+
+        Assert.True(result.Success);
+        Assert.Equal("onetwo", result.Stdout);
+    }
+
+    [Fact]
+    public void Redirect_EmptyStdout_TruncatesExistingFile()
+    {
+        _shell.Execute("echo one > /out.txt");
+        var redirectResult = _shell.Execute("echo > /out.txt");
+
+        var readResult = _shell.Execute("cat /out.txt");
+
+        Assert.True(redirectResult.Success);
+        Assert.True(readResult.Success);
+        Assert.Equal(string.Empty, readResult.Stdout);
+    }
+
+    [Fact]
+    public void Redirect_MissingOperand_ReturnsError()
+    {
+        var result = _shell.Execute("echo hi >");
+
+        Assert.False(result.Success);
+        Assert.Contains("missing file operand", result.Stderr, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Date_InvalidOption_ReturnsUsageContract()
+    {
+        var result = _shell.Execute("date invalid");
+
+        Assert.False(result.Success);
+        Assert.Contains("date: invalid option", result.Stderr, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("Usage:", result.Stderr, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Touch_MissingFileOperand_ReturnsContractError()
+    {
+        var result = _shell.Execute("touch");
+
+        Assert.False(result.Success);
+        Assert.Contains("touch: missing file operand", result.Stderr, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Redirect_ToDirectory_ReturnsError()
+    {
+        _fs.CreateDirectory("/dir");
+
+        var result = _shell.Execute("echo hi > /dir");
+
+        Assert.False(result.Success);
+        Assert.Contains("redirect:", result.Stderr, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void NewlineCommandSeparator_IsRejectedWithGuidance()
+    {
+        var result = _shell.Execute("echo one\necho two");
+
+        Assert.False(result.Success);
+        Assert.Contains("Multi-line scripts are not supported", result.Stderr, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Find_NameFilter_ReturnsMatchingEntriesOnly()
+    {
+        _fs.WriteFile("/src/app.cs", "x");
+        _fs.WriteFile("/src/app.txt", "x");
+        _fs.WriteFile("/src/sub/lib.cs", "x");
+
+        var result = _shell.Execute("find /src -name *.cs");
+
+        Assert.True(result.Success);
+        Assert.Contains("/src/app.cs", result.Stdout, StringComparison.Ordinal);
+        Assert.Contains("/src/sub/lib.cs", result.Stdout, StringComparison.Ordinal);
+        Assert.DoesNotContain("/src/app.txt", result.Stdout, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Wc_ByteCount_NoTrailingNewline_IsExact()
+    {
+        _fs.WriteFile("/bytes.txt", "abc");
+
+        var result = _shell.Execute("wc /bytes.txt");
+
+        Assert.True(result.Success);
+        Assert.Matches(@"\b1\s+1\s+3\s+/bytes\.txt\b", result.Stdout);
+    }
+
+    [Fact]
+    public void Wc_WordCount_TreatsNewlineAsWordBoundary()
+    {
+        _fs.WriteFile("/words.txt", "alpha\nbeta gamma");
+
+        var result = _shell.Execute("wc /words.txt");
+
+        Assert.True(result.Success);
+        Assert.Matches(@"\b2\s+3\s+\d+\s+/words\.txt\b", result.Stdout);
     }
 
     #endregion
@@ -1165,6 +1505,17 @@ public class SandboxShellTests
         Assert.Contains("line4", result.Stdout);
         Assert.DoesNotContain("line1", result.Stdout);
         Assert.DoesNotContain("line5", result.Stdout);
+    }
+
+    [Fact]
+    public void Grep_Context_OverlappingMatches_DoesNotEmitSeparator()
+    {
+        _fs.WriteFile("/test.txt", "line1\nmatch1\nline3\nmatch2\nline5");
+
+        var result = _shell.Execute("grep -C 1 match /test.txt");
+
+        Assert.True(result.Success);
+        Assert.DoesNotContain("--", result.Stdout, StringComparison.Ordinal);
     }
 
     [Fact]

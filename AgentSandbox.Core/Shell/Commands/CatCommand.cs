@@ -17,11 +17,13 @@ public class CatCommand : IShellCommand
         var parts = new List<string>();
         foreach (var file in args)
         {
-            var path = context.ResolvePath(file);
-            if (!context.FileSystem.Exists(path))
-                return ShellResult.Error($"cat: {file}: No such file or directory");
-            if (context.FileSystem.IsDirectory(path))
-                return ShellResult.Error($"cat: {file}: Is a directory");
+            if (!ShellCommandFileGuards.TryResolveReadableFilePath(context, Name, file, out var path, out var errorMessage))
+                return new ShellResult
+                {
+                    ExitCode = 1,
+                    Stdout = string.Join("\n", parts),
+                    Stderr = errorMessage
+                };
 
             // Use ReadFile() - IFileSystem handles UTF-8 decoding, no manual conversion needed
             parts.Add(context.FileSystem.ReadFile(path));

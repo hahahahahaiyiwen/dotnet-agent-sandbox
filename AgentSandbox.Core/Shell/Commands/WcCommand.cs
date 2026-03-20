@@ -23,24 +23,52 @@ public class WcCommand : IShellCommand
 
         foreach (var p in paths)
         {
-            var path = context.ResolvePath(p);
+            if (!ShellCommandFileGuards.TryResolveReadableFilePath(context, Name, p, out var path, out var errorMessage))
+                return ShellResult.Error(errorMessage);
+
+            var fileBytes = context.FileSystem.ReadFileBytes(path);
+            var fileContent = Encoding.UTF8.GetString(fileBytes);
+            var normalized = fileContent.Replace("\r\n", "\n").Replace("\r", "\n");
+            var linesSpan = normalized.AsSpan();
             var lines = 0;
             var words = 0;
-            var byteCount = 0;
+            var byteCount = fileBytes.Length;
             var inWord = false;
-            
-            // Stream lines directly - no UTF-8 string materialization
-            foreach (var line in context.FileSystem.ReadFileLines(path))
+
+            var lineStart = 0;
+            for (var i = 0; i < linesSpan.Length; i++)
+            {
+                if (linesSpan[i] != '\n')
+                    continue;
+
+                lines++;
+                var line = linesSpan[lineStart..i];
+
+                foreach (var c in line)
+                {
+                    if (char.IsWhiteSpace(c))
+                    {
+                        inWord = false;
+                    }
+                    else if (!inWord)
+                    {
+                        inWord = true;
+                        words++;
+                    }
+                }
+
+                // Newline between lines is a word boundary.
+                inWord = false;
+                lineStart = i + 1;
+            }
+
+            if (lineStart < linesSpan.Length)
             {
                 lines++;
-                // Count bytes for this line (including newline in original file)
-                byteCount += Encoding.UTF8.GetByteCount(line) + 1; // +1 for the newline character
-                
-                // Count words while iterating
-                foreach (var c in line.AsSpan())
+                var line = linesSpan[lineStart..];
+                foreach (var c in line)
                 {
-                    var isWhitespace = c == ' ' || c == '\t';
-                    if (isWhitespace)
+                    if (char.IsWhiteSpace(c))
                     {
                         inWord = false;
                     }

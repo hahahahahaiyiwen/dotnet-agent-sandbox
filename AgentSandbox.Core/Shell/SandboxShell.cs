@@ -572,7 +572,7 @@ public class SandboxShell : IShellContext, ISandboxShellHost
 
         var stdoutForAggregation = result.Stdout;
         var stderrForAggregation = result.Stderr;
-        if (redirectFile != null && result.Success && !string.IsNullOrEmpty(result.Stdout))
+        if (redirectFile != null && result.Success)
         {
             try
             {
