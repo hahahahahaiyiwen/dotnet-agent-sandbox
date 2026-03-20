@@ -67,7 +67,7 @@ Agent > exit
 dotnet add package AgentSandbox.Core
 
 # Or install a specific version
-dotnet add package AgentSandbox.Core --version 5.0.0
+dotnet add package AgentSandbox.Core --version 5.1.0
 ```
 
 ```csharp
@@ -572,9 +572,9 @@ dotnet add package AgentSandbox.Core
 dotnet add package AgentSandbox.Extensions
 ```
 
-## Release Notes (v5.0.0)
+## Release Notes (v5.1.0)
 
-- `AgentSandbox.Core` and `AgentSandbox.Extensions` package versions are bumped to **5.0.0**.
+- `AgentSandbox.Core` and `AgentSandbox.Extensions` package versions are bumped to **5.1.0**.
 - `AgentSandbox.Extensions` AI tool wrappers now return structured responses (`success`, `message`, `output`) for clearer downstream handling.
 - `read_file` line-range parameters now align with `ReadFileLines` semantics using **1-based** indexes (`startLine` inclusive, `endLine` exclusive).
 - Namespace examples use `AgentSandbox.Core.Shell.Extensions`.
