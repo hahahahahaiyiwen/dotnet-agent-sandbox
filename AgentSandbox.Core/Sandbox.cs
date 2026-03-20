@@ -926,6 +926,12 @@ public class Sandbox : IDisposable, IObservableSandbox
     private void TrackTimedOutIsolatedCommand(Task<ShellResult> executionTask)
     {
         Volatile.Write(ref _timedOutCommandTask, executionTask);
+        if (executionTask.IsCompleted)
+        {
+            Volatile.Write(ref _timedOutCommandTask, null);
+            return;
+        }
+
         executionTask.ContinueWith(static (task, state) =>
         {
             var sandbox = (Sandbox)state!;

@@ -43,7 +43,7 @@ A lightweight, in-memory virtual filesystem and shell for AI agents. Zero extern
 - Enable with `SandboxOptions.EnableIsolatedParallelCommandExecution = true`.
 - In this mode, `Execute` runs commands in isolated shell contexts with filesystem snapshots.
 - Command-local cwd/environment/session cache mutations are isolated and are not written back to the primary sandbox shell context.
-- Filesystem mutations made by isolated commands are also isolated and discarded after command completion.
+- Filesystem mutations made by isolated commands are confined to throwaway filesystem copies and do not affect the primary sandbox filesystem.
 - Shell extensions must implement `IParallelSafeShellCommand`; otherwise execution fails fast with actionable diagnostics.
 - Timed-out isolated commands are tracked and quarantined until completion to preserve lifecycle safety.
 - `RestoreSnapshot` and disposal still take exclusive coordination locks to preserve deterministic lifecycle behavior.
