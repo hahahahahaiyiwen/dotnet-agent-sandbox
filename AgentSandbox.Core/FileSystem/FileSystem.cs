@@ -505,7 +505,14 @@ public class FileSystem : IFileSystem, ISnapshotableFileSystem, IFileSystemStats
         if (!overwrite && Exists(destination))
             throw new InvalidOperationException($"Destination already exists: {destination}");
 
-        if (entry.IsDirectory)
+        if (!entry.IsDirectory)
+        {
+            WriteFile(destination, entry.Content);
+            return;
+        }
+
+        var rollbackSnapshot = CreateSnapshot();
+        try
         {
             CreateDirectory(destination);
             foreach (var child in ListDirectory(source))
@@ -513,9 +520,10 @@ public class FileSystem : IFileSystem, ISnapshotableFileSystem, IFileSystemStats
                 Copy(FileSystemPath.Combine(source, child), FileSystemPath.Combine(destination, child), overwrite);
             }
         }
-        else
+        catch
         {
-            WriteFile(destination, entry.Content);
+            RestoreSnapshot(rollbackSnapshot);
+            throw;
         }
     }
 

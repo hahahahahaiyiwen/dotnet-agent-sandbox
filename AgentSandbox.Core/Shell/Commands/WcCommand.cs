@@ -24,23 +24,19 @@ public class WcCommand : IShellCommand
         foreach (var p in paths)
         {
             var path = context.ResolvePath(p);
+            var fileBytes = context.FileSystem.ReadFileBytes(path);
             var lines = 0;
             var words = 0;
-            var byteCount = 0;
+            var byteCount = fileBytes.Length;
             var inWord = false;
             
-            // Stream lines directly - no UTF-8 string materialization
             foreach (var line in context.FileSystem.ReadFileLines(path))
             {
                 lines++;
-                // Count bytes for this line (including newline in original file)
-                byteCount += Encoding.UTF8.GetByteCount(line) + 1; // +1 for the newline character
-                
-                // Count words while iterating
+
                 foreach (var c in line.AsSpan())
                 {
-                    var isWhitespace = c == ' ' || c == '\t';
-                    if (isWhitespace)
+                    if (char.IsWhiteSpace(c))
                     {
                         inWord = false;
                     }
@@ -50,6 +46,9 @@ public class WcCommand : IShellCommand
                         words++;
                     }
                 }
+
+                // Newline between lines is a word boundary.
+                inWord = false;
             }
             
             output.AppendLine($"  {lines,6}  {words,6}  {byteCount,6} {p}");

@@ -154,7 +154,7 @@ internal static class ShellLexer
 
     private static void FlushCurrent(List<ShellToken> tokens, StringBuilder current, ref bool currentWasQuoted)
     {
-        if (current.Length == 0)
+        if (current.Length == 0 && !currentWasQuoted)
         {
             currentWasQuoted = false;
             return;

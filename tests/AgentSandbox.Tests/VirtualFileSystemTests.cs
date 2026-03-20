@@ -251,6 +251,20 @@ public class VirtualFileSystemTests
     }
 
     [Fact]
+    public void WriteFile_OverwriteExceedsLimit_PreservesExistingContent()
+    {
+        var options = new FileSystemOptions { MaxFileSize = 100 };
+        var fs = new FileSystem(options);
+
+        fs.WriteFile("/file.txt", "small");
+
+        Assert.Throws<InvalidOperationException>(() => fs.WriteFile("/file.txt", new byte[101]));
+
+        var content = Encoding.UTF8.GetString(fs.ReadFileBytes("/file.txt"));
+        Assert.Equal("small", content);
+    }
+
+    [Fact]
     public void Copy_File_EnforcesMaxFileSize()
     {
         var fsOptions = new FileSystemOptions { MaxFileSize = 50 };
@@ -287,6 +301,38 @@ public class VirtualFileSystemTests
         
         Assert.True(fs.Exists("/dest/file1.bin"));
         Assert.True(fs.Exists("/dest/file2.bin"));
+    }
+
+    [Fact]
+    public void Copy_Directory_Failure_RollsBackDestinationState()
+    {
+        var fsOptions = new FileSystemOptions { MaxTotalSize = 350 };
+        var fs = new FileSystem(fsOptions);
+
+        fs.WriteFile("/src/file1.bin", new byte[100]);
+        fs.WriteFile("/src/file2.bin", new byte[100]);
+
+        Assert.Throws<InvalidOperationException>(() => fs.Copy("/src", "/dest"));
+
+        Assert.True(fs.Exists("/src/file1.bin"));
+        Assert.True(fs.Exists("/src/file2.bin"));
+        Assert.False(fs.Exists("/dest"));
+    }
+
+    [Fact]
+    public void Move_Directory_Failure_RollsBackDestinationAndPreservesSource()
+    {
+        var fsOptions = new FileSystemOptions { MaxTotalSize = 350 };
+        var fs = new FileSystem(fsOptions);
+
+        fs.WriteFile("/src/file1.bin", new byte[100]);
+        fs.WriteFile("/src/file2.bin", new byte[100]);
+
+        Assert.Throws<InvalidOperationException>(() => fs.Move("/src", "/dest"));
+
+        Assert.True(fs.Exists("/src/file1.bin"));
+        Assert.True(fs.Exists("/src/file2.bin"));
+        Assert.False(fs.Exists("/dest"));
     }
 
     [Fact]

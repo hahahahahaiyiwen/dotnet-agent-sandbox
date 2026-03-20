@@ -36,6 +36,12 @@ public class TailCommand : IShellCommand
         if (paths.Count == 0)
             return ShellResult.Error("tail: missing file operand");
 
+        if (maxLines < 0)
+            return ShellResult.Error("tail: invalid number of lines");
+
+        if (maxLines == 0)
+            return ShellResult.Ok(string.Empty);
+
         var output = new StringBuilder();
         foreach (var p in paths)
         {
