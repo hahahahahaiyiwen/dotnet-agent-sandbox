@@ -2,12 +2,134 @@ using AgentSandbox.Core;
 using AgentSandbox.Core.Security;
 using AgentSandbox.Core.Shell.Extensions;
 using AgentSandbox.Core.Telemetry;
+using AgentSandbox.Core.Validation;
 using System.Net;
 
 namespace AgentSandbox.Tests;
 
 public class TelemetryTests
 {
+    [Fact]
+    public void Sandbox_CommandValidationFailure_EmitsCommandErrorTelemetryEvent()
+    {
+        var errors = new List<SandboxErrorEvent>();
+        var observer = new DelegateSandboxObserver(onError: e => errors.Add(e));
+
+        var options = new SandboxOptions
+        {
+            MaxCommandLength = 8,
+            Telemetry = new SandboxTelemetryOptions { Enabled = true }
+        };
+
+        using var sandbox = new Sandbox(options: options);
+        sandbox.Subscribe(observer);
+
+        Assert.Throws<CoreValidationException>(() => sandbox.Execute("echo this command is too long"));
+
+        var errorEvent = Assert.Single(errors);
+        Assert.Equal("Command", errorEvent.Category);
+        Assert.Contains("exceeds max bytes", errorEvent.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(nameof(CoreValidationException), errorEvent.ExceptionType);
+    }
+
+    [Fact]
+    public void Sandbox_PathValidationFailureOnRead_EmitsFileIoErrorTelemetryEvent()
+    {
+        var errors = new List<SandboxErrorEvent>();
+        var observer = new DelegateSandboxObserver(onError: e => errors.Add(e));
+
+        var options = new SandboxOptions
+        {
+            Telemetry = new SandboxTelemetryOptions { Enabled = true }
+        };
+
+        using var sandbox = new Sandbox(options: options);
+        sandbox.Subscribe(observer);
+
+        Assert.Throws<CoreValidationException>(() => sandbox.ReadFileLines("/safe/../secret.txt").ToList());
+
+        var errorEvent = Assert.Single(errors);
+        Assert.Equal("FileIO", errorEvent.Category);
+        Assert.Contains("ReadFile failed", errorEvent.Message, StringComparison.Ordinal);
+        Assert.Equal(nameof(CoreValidationException), errorEvent.ExceptionType);
+    }
+
+    [Fact]
+    public void Sandbox_PathValidationFailureOnWrite_EmitsFileIoErrorTelemetryEvent()
+    {
+        var errors = new List<SandboxErrorEvent>();
+        var observer = new DelegateSandboxObserver(onError: e => errors.Add(e));
+
+        var options = new SandboxOptions
+        {
+            Telemetry = new SandboxTelemetryOptions { Enabled = true }
+        };
+
+        using var sandbox = new Sandbox(options: options);
+        sandbox.Subscribe(observer);
+
+        Assert.Throws<CoreValidationException>(() => sandbox.WriteFile("/safe/../secret.txt", "data"));
+
+        var errorEvent = Assert.Single(errors);
+        Assert.Equal("FileIO", errorEvent.Category);
+        Assert.Contains("WriteFile failed", errorEvent.Message, StringComparison.Ordinal);
+        Assert.Equal(nameof(CoreValidationException), errorEvent.ExceptionType);
+    }
+
+    [Fact]
+    public void Sandbox_PathValidationFailureOnApplyPatch_EmitsFileIoErrorTelemetryEvent()
+    {
+        var errors = new List<SandboxErrorEvent>();
+        var observer = new DelegateSandboxObserver(onError: e => errors.Add(e));
+
+        var options = new SandboxOptions
+        {
+            Telemetry = new SandboxTelemetryOptions { Enabled = true }
+        };
+
+        using var sandbox = new Sandbox(options: options);
+        sandbox.Subscribe(observer);
+
+        Assert.Throws<CoreValidationException>(() => sandbox.ApplyPatch("/safe/../secret.txt", "@@ -1,1 +1,1 @@\n-a\n+b"));
+
+        var errorEvent = Assert.Single(errors);
+        Assert.Equal("FileIO", errorEvent.Category);
+        Assert.Contains("ApplyPatch failed", errorEvent.Message, StringComparison.Ordinal);
+        Assert.Equal(nameof(CoreValidationException), errorEvent.ExceptionType);
+    }
+
+    [Fact]
+    public void Sandbox_DisableCommandTracing_StillEmitsCommandAndLifecycleEvents()
+    {
+        var commandEvents = new List<CommandExecutedEvent>();
+        var lifecycleEvents = new List<SandboxLifecycleEvent>();
+        var observer = new DelegateSandboxObserver(
+            onCommandExecuted: e => commandEvents.Add(e),
+            onLifecycleEvent: e => lifecycleEvents.Add(e));
+
+        var options = new SandboxOptions
+        {
+            Telemetry = new SandboxTelemetryOptions
+            {
+                Enabled = true,
+                TraceCommands = false,
+                TraceFileSystem = false
+            }
+        };
+
+        using var sandbox = new Sandbox(options: options);
+        sandbox.Subscribe(observer);
+
+        var result = sandbox.Execute("echo hello");
+        Assert.True(result.Success);
+
+        var commandEvent = Assert.Single(commandEvents);
+        Assert.Equal("echo", commandEvent.CommandName);
+        Assert.Null(commandEvent.TraceId);
+        Assert.Null(commandEvent.SpanId);
+        Assert.Contains(lifecycleEvents, e => e.LifecycleType == SandboxLifecycleType.Executed);
+    }
+
     [Fact]
     public void Sandbox_WithTelemetryDisabled_DoesNotEmitEvents()
     {
