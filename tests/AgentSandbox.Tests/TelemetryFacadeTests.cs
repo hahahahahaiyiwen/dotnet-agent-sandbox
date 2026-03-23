@@ -1,5 +1,4 @@
 using System.Diagnostics;
-using System.Reflection;
 using AgentSandbox.Core;
 using AgentSandbox.Core.Telemetry;
 using AgentSandbox.Core.Shell;
@@ -12,7 +11,7 @@ public class TelemetryFacadeTests
     public void TelemetryFacade_WithTelemetryDisabled_SkipsActivitiesAndEventEmission()
     {
         var emitter = new CapturingEventEmitter();
-        var facade = CreateFacade(new SandboxOptions
+        var facade = CreateFacadeInstance(new SandboxOptions
         {
             Telemetry = new SandboxTelemetryOptions
             {
@@ -22,20 +21,20 @@ public class TelemetryFacadeTests
             }
         }, emitter);
 
-        Assert.Null(Invoke<Activity?>(facade, "StartCommandActivity", "echo hi"));
-        Assert.Null(Invoke<Activity?>(facade, "StartReadFileActivity", "/file.txt"));
-        Assert.Null(Invoke<Activity?>(facade, "StartWriteFileActivity", "/file.txt"));
-        Assert.Null(Invoke<Activity?>(facade, "StartApplyPatchActivity", "/file.txt"));
-        Assert.Null(Invoke<Activity?>(facade, "StartOperationActivity", "capability", "run", "sql"));
+        Assert.Null(facade.StartCommandActivity("echo hi"));
+        Assert.Null(facade.StartReadFileActivity("/file.txt"));
+        Assert.Null(facade.StartWriteFileActivity("/file.txt"));
+        Assert.Null(facade.StartApplyPatchActivity("/file.txt"));
+        Assert.Null(facade.StartOperationActivity("capability", "run", "sql"));
 
-        Invoke(facade, "RecordSandboxCreated");
-        Invoke(facade, "RecordSandboxDisposed");
-        Invoke(facade, "RecordSandboxExecuted", "echo", 0, TimeSpan.FromMilliseconds(1));
-        Invoke(facade, "RecordSnapshotRestored", "snap-1");
-        Invoke(facade, "RecordCommandError", new InvalidOperationException("boom"));
-        Invoke(facade, "RecordReadFileError", "/file.txt", new InvalidOperationException("boom"));
-        Invoke(facade, "RecordWriteFileError", "/file.txt", new InvalidOperationException("boom"));
-        Invoke(facade, "RecordApplyPatchError", "/file.txt", new InvalidOperationException("boom"));
+        facade.RecordSandboxCreated();
+        facade.RecordSandboxDisposed();
+        facade.RecordSandboxExecuted("echo", 0, TimeSpan.FromMilliseconds(1));
+        facade.RecordSnapshotRestored("snap-1");
+        facade.RecordCommandError(new InvalidOperationException("boom"));
+        facade.RecordReadFileError("/file.txt", new InvalidOperationException("boom"));
+        facade.RecordWriteFileError("/file.txt", new InvalidOperationException("boom"));
+        facade.RecordApplyPatchError("/file.txt", new InvalidOperationException("boom"));
 
         Assert.Empty(emitter.Events);
     }
@@ -45,7 +44,7 @@ public class TelemetryFacadeTests
     {
         using var listener = CreateTelemetryListener();
         var emitter = new CapturingEventEmitter();
-        var facade = CreateFacade(new SandboxOptions
+        var facade = CreateFacadeInstance(new SandboxOptions
         {
             Telemetry = new SandboxTelemetryOptions
             {
@@ -55,25 +54,25 @@ public class TelemetryFacadeTests
             }
         }, emitter);
 
-        using var commandActivity = Invoke<Activity?>(facade, "StartCommandActivity", "echo hello");
+        using var commandActivity = facade.StartCommandActivity("echo hello");
         Assert.NotNull(commandActivity);
 
-        using var readActivity = Invoke<Activity?>(facade, "StartReadFileActivity", "/a.txt");
+        using var readActivity = facade.StartReadFileActivity("/a.txt");
         Assert.NotNull(readActivity);
 
-        using var writeActivity = Invoke<Activity?>(facade, "StartWriteFileActivity", "/a.txt");
+        using var writeActivity = facade.StartWriteFileActivity("/a.txt");
         Assert.NotNull(writeActivity);
 
-        using var patchActivity = Invoke<Activity?>(facade, "StartApplyPatchActivity", "/a.txt");
+        using var patchActivity = facade.StartApplyPatchActivity("/a.txt");
         Assert.NotNull(patchActivity);
 
-        using var operationActivity = Invoke<Activity?>(facade, "StartOperationActivity", "capability", "run", "sql");
+        using var operationActivity = facade.StartOperationActivity("capability", "run", "sql");
         Assert.NotNull(operationActivity);
         Assert.Contains(operationActivity.TagObjects, t => t.Key == "operation.type" && Equals(t.Value, "capability"));
         Assert.Contains(operationActivity.TagObjects, t => t.Key == "operation.name" && Equals(t.Value, "run"));
         Assert.Contains(operationActivity.TagObjects, t => t.Key == "capability.name" && Equals(t.Value, "sql"));
 
-        using var noCapabilityActivity = Invoke<Activity?>(facade, "StartOperationActivity", "capability", "run", null);
+        using var noCapabilityActivity = facade.StartOperationActivity("capability", "run", null);
         Assert.NotNull(noCapabilityActivity);
         Assert.DoesNotContain(noCapabilityActivity.TagObjects, t => t.Key == "capability.name");
     }
@@ -83,7 +82,7 @@ public class TelemetryFacadeTests
     {
         using var listener = CreateTelemetryListener();
         var emitter = new CapturingEventEmitter();
-        var facade = CreateFacade(new SandboxOptions
+        var facade = CreateFacadeInstance(new SandboxOptions
         {
             Telemetry = new SandboxTelemetryOptions
             {
@@ -93,21 +92,21 @@ public class TelemetryFacadeTests
             }
         }, emitter);
 
-        Assert.Null(Invoke<Activity?>(facade, "StartOperationActivity", "capability", "run", "sql"));
+        Assert.Null(facade.StartOperationActivity("capability", "run", "sql"));
     }
 
     [Fact]
     public void TelemetryFacade_RecordOperationSuccess_WithCapabilityAndNoActivity_DoesNotThrow()
     {
         var emitter = new CapturingEventEmitter();
-        var facade = CreateFacade(new SandboxOptions
+        var facade = CreateFacadeInstance(new SandboxOptions
         {
             Telemetry = new SandboxTelemetryOptions { Enabled = true }
         }, emitter);
 
         var tags = new Dictionary<string, object?> { ["custom.key"] = "value" };
 
-        Invoke(facade, "RecordOperationSuccess", "capability", "run", "sql", TimeSpan.FromMilliseconds(3), tags);
+        facade.RecordOperationSuccess("capability", "run", "sql", TimeSpan.FromMilliseconds(3), tags);
     }
 
     [Fact]
@@ -115,7 +114,7 @@ public class TelemetryFacadeTests
     {
         using var listener = CreateTelemetryListener();
         var emitter = new CapturingEventEmitter();
-        var facade = CreateFacade(new SandboxOptions
+        var facade = CreateFacadeInstance(new SandboxOptions
         {
             Telemetry = new SandboxTelemetryOptions { Enabled = true }
         }, emitter);
@@ -125,7 +124,7 @@ public class TelemetryFacadeTests
         var stopwatch = Stopwatch.StartNew();
         stopwatch.Stop();
 
-        Invoke(facade, "RecordReadFileSuccess", "/a.txt", stopwatch, 42L, "partial", (int?)null, (int?)null, (int?)null);
+        facade.RecordReadFileSuccess("/a.txt", stopwatch, 42L, "partial", startLine: null, endLine: null, linesReturned: null);
 
         Assert.DoesNotContain(activity.TagObjects, t => t.Key == "file.lines_returned");
     }
@@ -135,7 +134,7 @@ public class TelemetryFacadeTests
     {
         using var listener = CreateTelemetryListener();
         var emitter = new CapturingEventEmitter();
-        var facade = CreateFacade(new SandboxOptions
+        var facade = CreateFacadeInstance(new SandboxOptions
         {
             Telemetry = new SandboxTelemetryOptions { Enabled = true }
         }, emitter);
@@ -145,15 +144,15 @@ public class TelemetryFacadeTests
         var stopwatch = Stopwatch.StartNew();
         stopwatch.Stop();
 
-        Invoke(facade, "RecordReadFileSuccess", "/a.txt", stopwatch, 42L, "partial", (int?)2, (int?)5, (int?)3);
+        facade.RecordReadFileSuccess("/a.txt", stopwatch, 42L, "partial", 2, 5, 3);
         Assert.Contains(activity.TagObjects, t => t.Key == "operation.type" && Equals(t.Value, "file.read"));
         Assert.Contains(activity.TagObjects, t => t.Key == "operation.success" && Equals(t.Value, true));
         Assert.Contains(activity.TagObjects, t => t.Key == "file.lines_returned" && Equals(t.Value, 3));
 
-        Invoke(facade, "RecordWriteFileSuccess", "/a.txt", stopwatch, 4L);
+        facade.RecordWriteFileSuccess("/a.txt", stopwatch, 4L);
         Assert.Contains(activity.TagObjects, t => t.Key == "operation.name" && Equals(t.Value, "write_file"));
 
-        Invoke(facade, "RecordApplyPatchSuccess", "/a.txt", stopwatch, 6L);
+        facade.RecordApplyPatchSuccess("/a.txt", stopwatch, 6L);
         Assert.Contains(activity.TagObjects, t => t.Key == "operation.name" && Equals(t.Value, "apply_patch"));
     }
 
@@ -161,13 +160,13 @@ public class TelemetryFacadeTests
     public void TelemetryFacade_RecordOperationFailure_WithoutActivity_DoesNotThrow()
     {
         var emitter = new CapturingEventEmitter();
-        var facade = CreateFacade(new SandboxOptions
+        var facade = CreateFacadeInstance(new SandboxOptions
         {
             Telemetry = new SandboxTelemetryOptions { Enabled = true }
         }, emitter);
 
         var tags = new Dictionary<string, object?> { ["custom.key"] = "custom-value" };
-        Invoke(facade, "RecordOperationFailure", "capability", "run", "sql", "failed", "E123", tags);
+        facade.RecordOperationFailure("capability", "run", "sql", "failed", "E123", tags);
     }
 
     [Fact]
@@ -175,7 +174,7 @@ public class TelemetryFacadeTests
     {
         using var listener = CreateTelemetryListener();
         var emitter = new CapturingEventEmitter();
-        var facade = CreateFacade(new SandboxOptions
+        var facade = CreateFacadeInstance(new SandboxOptions
         {
             Telemetry = new SandboxTelemetryOptions { Enabled = true }
         }, emitter);
@@ -184,7 +183,7 @@ public class TelemetryFacadeTests
         Assert.NotNull(activity);
         var result = ShellResult.Ok("output");
 
-        Invoke(facade, "RecordCommandSuccess", "echo output", result, TimeSpan.FromMilliseconds(2));
+        facade.RecordCommandSuccess("echo output", result, TimeSpan.FromMilliseconds(2));
 
         var commandEvent = Assert.Single(emitter.Events.OfType<CommandExecutedEvent>());
         Assert.Equal("/", commandEvent.WorkingDirectory);
@@ -196,7 +195,7 @@ public class TelemetryFacadeTests
     {
         using var listener = CreateTelemetryListener();
         var emitter = new CapturingEventEmitter();
-        var facade = CreateFacade(new SandboxOptions
+        var facade = CreateFacadeInstance(new SandboxOptions
         {
             Telemetry = new SandboxTelemetryOptions { Enabled = true }
         }, emitter);
@@ -205,7 +204,7 @@ public class TelemetryFacadeTests
         Assert.NotNull(activity);
 
         var tags = new Dictionary<string, object?> { ["custom.key"] = "custom-value" };
-        Invoke(facade, "RecordOperationFailure", "capability", "run", "sql", "failed", "E123", tags);
+        facade.RecordOperationFailure("capability", "run", "sql", "failed", "E123", tags);
 
         Assert.Equal(ActivityStatusCode.Error, activity.Status);
         Assert.Equal("failed", activity.StatusDescription);
@@ -221,7 +220,7 @@ public class TelemetryFacadeTests
     {
         using var listener = CreateTelemetryListener();
         var emitter = new CapturingEventEmitter();
-        var facade = CreateFacade(new SandboxOptions
+        var facade = CreateFacadeInstance(new SandboxOptions
         {
             Telemetry = new SandboxTelemetryOptions { Enabled = true }
         }, emitter);
@@ -229,10 +228,10 @@ public class TelemetryFacadeTests
         using var activity = SandboxTelemetryHelper.ActivitySource.StartActivity("facade.errors");
         Assert.NotNull(activity);
 
-        Invoke(facade, "RecordCommandError", new InvalidOperationException("command boom"));
-        Invoke(facade, "RecordReadFileError", "/r.txt", new InvalidOperationException("read boom"));
-        Invoke(facade, "RecordWriteFileError", "/w.txt", new InvalidOperationException("write boom"));
-        Invoke(facade, "RecordApplyPatchError", "/p.txt", new InvalidOperationException("patch boom"));
+        facade.RecordCommandError(new InvalidOperationException("command boom"));
+        facade.RecordReadFileError("/r.txt", new InvalidOperationException("read boom"));
+        facade.RecordWriteFileError("/w.txt", new InvalidOperationException("write boom"));
+        facade.RecordApplyPatchError("/p.txt", new InvalidOperationException("patch boom"));
 
         var errors = emitter.Events.OfType<SandboxErrorEvent>().ToList();
         Assert.Equal(4, errors.Count);
@@ -252,7 +251,7 @@ public class TelemetryFacadeTests
             ["requestId"] = "req-2"
         };
         var emitter = new CapturingEventEmitter();
-        var facade = CreateFacade(new SandboxOptions
+        var facade = CreateFacadeInstance(new SandboxOptions
         {
             Telemetry = new SandboxTelemetryOptions
             {
@@ -261,11 +260,11 @@ public class TelemetryFacadeTests
             }
         }, emitter);
 
-        Invoke(facade, "RecordSandboxCreated");
-        Invoke(facade, "RecordSandboxExecuted", "echo", 0, TimeSpan.FromMilliseconds(2));
-        Invoke(facade, "RecordSnapshotRestored", new object?[] { null });
-        Invoke(facade, "RecordSnapshotRestored", "snap-1");
-        Invoke(facade, "RecordSandboxDisposed");
+        facade.RecordSandboxCreated();
+        facade.RecordSandboxExecuted("echo", 0, TimeSpan.FromMilliseconds(2));
+        facade.RecordSnapshotRestored((string?)null);
+        facade.RecordSnapshotRestored("snap-1");
+        facade.RecordSandboxDisposed();
 
         var lifecycle = emitter.Events.OfType<SandboxLifecycleEvent>().ToList();
         Assert.Equal(5, lifecycle.Count);
@@ -278,21 +277,9 @@ public class TelemetryFacadeTests
         Assert.All(lifecycle, e => Assert.Equal("req-2", e.HostCorrelationMetadata!["requestId"]));
     }
 
-    private static object CreateFacade(SandboxOptions options, ISandboxEventEmitter emitter)
+    private static SandboxTelemetryFacade CreateFacadeInstance(SandboxOptions options, ISandboxEventEmitter emitter)
     {
-        var facadeType = typeof(Sandbox).Assembly.GetType("AgentSandbox.Core.Telemetry.SandboxTelemetryFacade", throwOnError: true)!;
-        return Activator.CreateInstance(facadeType, options, "facade-test", emitter)!;
-    }
-
-    private static T? Invoke<T>(object instance, string methodName, params object?[] args)
-    {
-        var method = instance.GetType().GetMethod(methodName, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)!;
-        return (T?)method.Invoke(instance, args);
-    }
-
-    private static void Invoke(object instance, string methodName, params object?[] args)
-    {
-        _ = Invoke<object?>(instance, methodName, args);
+        return new SandboxTelemetryFacade(options, "facade-test", emitter);
     }
 
     private static ActivityListener CreateTelemetryListener()

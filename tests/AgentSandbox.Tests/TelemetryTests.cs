@@ -4,6 +4,7 @@ using AgentSandbox.Core.Shell.Extensions;
 using AgentSandbox.Core.Telemetry;
 using AgentSandbox.Core.Validation;
 using System.Net;
+using System.Diagnostics;
 
 namespace AgentSandbox.Tests;
 
@@ -101,6 +102,16 @@ public class TelemetryTests
     [Fact]
     public void Sandbox_DisableCommandTracing_StillEmitsCommandAndLifecycleEvents()
     {
+        using var listener = CreateTelemetryListener();
+        var startedActivities = new List<string>();
+        listener.ActivityStarted = activity =>
+        {
+            lock (startedActivities)
+            {
+                startedActivities.Add(activity.OperationName);
+            }
+        };
+
         var commandEvents = new List<CommandExecutedEvent>();
         var lifecycleEvents = new List<SandboxLifecycleEvent>();
         var observer = new DelegateSandboxObserver(
@@ -125,9 +136,9 @@ public class TelemetryTests
 
         var commandEvent = Assert.Single(commandEvents);
         Assert.Equal("echo", commandEvent.CommandName);
-        Assert.Null(commandEvent.TraceId);
-        Assert.Null(commandEvent.SpanId);
         Assert.Contains(lifecycleEvents, e => e.LifecycleType == SandboxLifecycleType.Executed);
+        Assert.Contains(startedActivities, name => string.Equals(name, "sandbox.lifecycle", StringComparison.Ordinal));
+        Assert.DoesNotContain(startedActivities, name => name.StartsWith("sandbox.command.", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -421,5 +432,17 @@ public class TelemetryTests
                 Content = new StringContent($"echo:{_secret}")
             });
         }
+    }
+
+    private static ActivityListener CreateTelemetryListener()
+    {
+        var listener = new ActivityListener
+        {
+            ShouldListenTo = source => source.Name == SandboxTelemetryHelper.ServiceName,
+            Sample = static (ref ActivityCreationOptions<ActivityContext> _) => ActivitySamplingResult.AllDataAndRecorded,
+            SampleUsingParentId = static (ref ActivityCreationOptions<string> _) => ActivitySamplingResult.AllDataAndRecorded
+        };
+        ActivitySource.AddActivityListener(listener);
+        return listener;
     }
 }
