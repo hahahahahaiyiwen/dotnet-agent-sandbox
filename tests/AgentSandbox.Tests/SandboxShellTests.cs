@@ -346,6 +346,17 @@ public class SandboxShellTests
     }
 
     [Fact]
+    public void Tail_ExcessiveN_ReturnsContractError()
+    {
+        _fs.WriteFile("/lines.txt", "line1\nline2");
+
+        var result = _shell.Execute("tail -n 1000000000 /lines.txt");
+
+        Assert.False(result.Success);
+        Assert.Contains("tail: invalid number of lines", result.Stderr, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Grep_FindsMatchingLines()
     {
         _fs.WriteFile("/search.txt", "apple\nbanana\napricot\ncherry");
@@ -400,6 +411,24 @@ public class SandboxShellTests
     public void Export_InvalidAssignment_ReturnsContractError()
     {
         var result = _shell.Execute("export FOO");
+
+        Assert.False(result.Success);
+        Assert.Contains("export: invalid assignment", result.Stderr, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Export_EmptyVariableName_ReturnsContractError()
+    {
+        var result = _shell.Execute("export =value");
+
+        Assert.False(result.Success);
+        Assert.Contains("export: invalid assignment", result.Stderr, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Export_InvalidVariableName_ReturnsContractError()
+    {
+        var result = _shell.Execute("export 1FOO=value");
 
         Assert.False(result.Success);
         Assert.Contains("export: invalid assignment", result.Stderr, StringComparison.Ordinal);
