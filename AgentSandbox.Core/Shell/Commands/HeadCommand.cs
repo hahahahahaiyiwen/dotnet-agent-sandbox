@@ -25,7 +25,10 @@ public class HeadCommand : IShellCommand
         {
             if (args[i] == "-n" && i + 1 < args.Length)
             {
-                int.TryParse(args[++i], out maxLines);
+                if (!int.TryParse(args[++i], out maxLines) || maxLines < 0)
+                {
+                    return ShellResult.Error("head: invalid number of lines");
+                }
             }
             else if (!args[i].StartsWith('-'))
             {

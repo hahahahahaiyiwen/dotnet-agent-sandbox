@@ -25,7 +25,10 @@ public class TailCommand : IShellCommand
         {
             if (args[i] == "-n" && i + 1 < args.Length)
             {
-                int.TryParse(args[++i], out maxLines);
+                if (!int.TryParse(args[++i], out maxLines))
+                {
+                    return ShellResult.Error("tail: invalid number of lines");
+                }
             }
             else if (!args[i].StartsWith('-'))
             {

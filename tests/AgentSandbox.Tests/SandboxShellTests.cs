@@ -1,5 +1,6 @@
 using AgentSandbox.Core.FileSystem;
 using AgentSandbox.Core.Shell;
+using AgentSandbox.Core.Security;
 
 namespace AgentSandbox.Tests;
 
@@ -312,6 +313,39 @@ public class SandboxShellTests
     }
 
     [Fact]
+    public void Head_InvalidNonNumericN_ReturnsContractError()
+    {
+        _fs.WriteFile("/lines.txt", "line1\nline2");
+
+        var result = _shell.Execute("head -n x /lines.txt");
+
+        Assert.False(result.Success);
+        Assert.Contains("head: invalid number of lines", result.Stderr, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Head_InvalidNegativeN_ReturnsContractError()
+    {
+        _fs.WriteFile("/lines.txt", "line1\nline2");
+
+        var result = _shell.Execute("head -n -2 /lines.txt");
+
+        Assert.False(result.Success);
+        Assert.Contains("head: invalid number of lines", result.Stderr, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Tail_InvalidNonNumericN_ReturnsContractError()
+    {
+        _fs.WriteFile("/lines.txt", "line1\nline2");
+
+        var result = _shell.Execute("tail -n x /lines.txt");
+
+        Assert.False(result.Success);
+        Assert.Contains("tail: invalid number of lines", result.Stderr, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Grep_FindsMatchingLines()
     {
         _fs.WriteFile("/search.txt", "apple\nbanana\napricot\ncherry");
@@ -351,6 +385,24 @@ public class SandboxShellTests
         _shell.Execute("export MY_VAR=my_value");
         
         Assert.Equal("my_value", ((IShellContext)_shell).Environment["MY_VAR"]);
+    }
+
+    [Fact]
+    public void Export_NoAssignments_ReturnsContractError()
+    {
+        var result = _shell.Execute("export");
+
+        Assert.False(result.Success);
+        Assert.Contains("export: missing assignment", result.Stderr, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Export_InvalidAssignment_ReturnsContractError()
+    {
+        var result = _shell.Execute("export FOO");
+
+        Assert.False(result.Success);
+        Assert.Contains("export: invalid assignment", result.Stderr, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -1464,6 +1516,25 @@ public class SandboxShellTests
         Assert.Equal(2, lines.Length);
     }
 
+    [Theory]
+    [InlineData("-A -1")]
+    [InlineData("-B -1")]
+    [InlineData("-C -1")]
+    [InlineData("-m -1")]
+    [InlineData("-A x")]
+    [InlineData("-B x")]
+    [InlineData("-C x")]
+    [InlineData("-m x")]
+    public void Grep_InvalidNumericOption_ReturnsContractError(string options)
+    {
+        _fs.WriteFile("/test.txt", "line1\nmatch\nline3");
+
+        var result = _shell.Execute($"grep {options} match /test.txt");
+
+        Assert.False(result.Success);
+        Assert.Contains("grep: invalid numeric option", result.Stderr, StringComparison.Ordinal);
+    }
+
     [Fact]
     public void Grep_AfterContext_ShowsLinesAfterMatch()
     {
@@ -1527,6 +1598,218 @@ public class SandboxShellTests
 
         Assert.True(result.Success);
         Assert.Equal("0", result.Stdout); // All lines match hello with -i, so inverted count is 0
+    }
+
+    [Fact]
+    public void Execute_WhitespaceOnly_ReturnsSuccessWithEmptyOutput()
+    {
+        var result = _shell.Execute("   ");
+
+        Assert.True(result.Success);
+        Assert.Equal(string.Empty, result.Stdout);
+        Assert.Equal(string.Empty, result.Stderr);
+    }
+
+    [Fact]
+    public void RegisterCommand_WithAlias_AllowsAliasInvocation()
+    {
+        _shell.RegisterCommand(new AliasEchoCommand());
+
+        var result = _shell.Execute("ae hello");
+
+        Assert.True(result.Success);
+        Assert.Equal("hello", result.Stdout);
+    }
+
+    [Fact]
+    public void ExtensionCommand_Throws_ReturnsPrefixedError()
+    {
+        _shell.RegisterCommand(new ThrowingExtensionCommand());
+
+        var result = _shell.Execute("boom-ext");
+
+        Assert.False(result.Success);
+        Assert.Contains("boom-ext: expected failure", result.Stderr, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ShellContext_TryResolveSecret_WithMaxAgePolicyAndMissingResolvedTimestamp_ReturnsError()
+    {
+        var shell = new SandboxShell(
+            _fs,
+            new LegacyStringOnlySecretBroker(new Dictionary<string, string>
+            {
+                ["api-token"] = "super-secret-token"
+            }),
+            new SecretResolutionPolicy
+            {
+                MaxSecretAge = TimeSpan.FromMinutes(5)
+            });
+        var context = (IShellContext)shell;
+
+        var success = context.TryResolveSecret(
+            "api-token",
+            new SecretAccessRequest
+            {
+                CommandName = "unit-test"
+            },
+            out _,
+            out var errorMessage);
+
+        Assert.False(success);
+        Assert.Contains("missing resolved timestamp required by max-age policy", errorMessage, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ShellContext_TryResolveSecretReferences_EmptyInput_ReturnsUnchanged()
+    {
+        var context = (IShellContext)_shell;
+        var resolvedSecrets = new HashSet<string>(StringComparer.Ordinal);
+
+        var success = context.TryResolveSecretReferences(
+            string.Empty,
+            new SecretAccessRequest
+            {
+                CommandName = "unit-test"
+            },
+            resolvedSecrets,
+            out var resolvedValue,
+            out var errorMessage);
+
+        Assert.True(success);
+        Assert.Equal(string.Empty, resolvedValue);
+        Assert.Null(errorMessage);
+        Assert.Empty(resolvedSecrets);
+    }
+
+    [Fact]
+    public void Help_WhenExtensionRegistered_ListsExtensionCommandsSection()
+    {
+        _shell.RegisterCommand(new AliasEchoCommand());
+
+        var result = _shell.Execute("help");
+
+        Assert.True(result.Success);
+        Assert.Contains("Extension commands:", result.Stdout, StringComparison.Ordinal);
+        Assert.Contains("alias-echo", result.Stdout, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void GlobExpansion_RecursivePathPattern_MatchesNestedDirectories()
+    {
+        _fs.WriteFile("/project/src/a/file1.txt", "one");
+        _fs.WriteFile("/project/src/b/file2.txt", "two");
+        _shell.Execute("cd /project");
+
+        var result = _shell.Execute("cat src/*/*.txt");
+
+        Assert.True(result.Success);
+        Assert.Contains("one", result.Stdout, StringComparison.Ordinal);
+        Assert.Contains("two", result.Stdout, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void DirectScriptExecution_WhenReadThrows_ReturnsPrefixedError()
+    {
+        var fs = new ThrowingReadFileSystem("/boom.sh", "read failure");
+        fs.WriteFile("/boom.sh", "echo ignored");
+        var shell = new SandboxShell(fs);
+
+        var result = shell.Execute("./boom.sh");
+
+        Assert.False(result.Success);
+        Assert.Contains("./boom.sh: read failure", result.Stderr, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ShCommand_WhenReadThrows_ReturnsShPrefixedError()
+    {
+        var fs = new ThrowingReadFileSystem("/boom.sh", "read failure");
+        fs.WriteFile("/boom.sh", "echo ignored");
+        var shell = new SandboxShell(fs);
+
+        var result = shell.Execute("sh /boom.sh");
+
+        Assert.False(result.Success);
+        Assert.Contains("sh: read failure", result.Stderr, StringComparison.Ordinal);
+    }
+
+    private sealed class AliasEchoCommand : IShellCommand
+    {
+        public string Name => "alias-echo";
+        public string Description => "Echoes first arg.";
+        public IReadOnlyList<string> Aliases => ["ae"];
+
+        public ShellResult Execute(string[] args, IShellContext context)
+        {
+            return ShellResult.Ok(args.Length > 0 ? args[0] : string.Empty);
+        }
+    }
+
+    private sealed class ThrowingExtensionCommand : IShellCommand
+    {
+        public string Name => "boom-ext";
+        public string Description => "Throws for test coverage.";
+
+        public ShellResult Execute(string[] args, IShellContext context)
+        {
+            throw new InvalidOperationException("expected failure");
+        }
+    }
+
+    private sealed class LegacyStringOnlySecretBroker : ISecretBroker
+    {
+        private readonly IReadOnlyDictionary<string, string> _secrets;
+
+        public LegacyStringOnlySecretBroker(IReadOnlyDictionary<string, string> secrets)
+        {
+            _secrets = secrets;
+        }
+
+        public bool TryResolve(string secretRef, out string secretValue)
+        {
+            return _secrets.TryGetValue(secretRef, out secretValue!);
+        }
+    }
+
+    private sealed class ThrowingReadFileSystem : IFileSystem
+    {
+        private readonly FileSystem _inner = new();
+        private readonly string _throwPath;
+        private readonly string _message;
+
+        public ThrowingReadFileSystem(string throwPath, string message)
+        {
+            _throwPath = FileSystemPath.Normalize(throwPath);
+            _message = message;
+        }
+
+        public bool Exists(string path) => _inner.Exists(path);
+        public bool IsFile(string path) => _inner.IsFile(path);
+        public bool IsDirectory(string path) => _inner.IsDirectory(path);
+        public FileEntry? GetEntry(string path) => _inner.GetEntry(path);
+        public void CreateDirectory(string path) => _inner.CreateDirectory(path);
+        public IEnumerable<string> ListDirectory(string path) => _inner.ListDirectory(path);
+
+        public byte[] ReadFileBytes(string path)
+        {
+            if (FileSystemPath.Normalize(path) == _throwPath)
+            {
+                throw new InvalidOperationException(_message);
+            }
+
+            return _inner.ReadFileBytes(path);
+        }
+
+        public string ReadFile(string path) => _inner.ReadFile(path);
+        public IEnumerable<string> ReadFileLines(string path, int? startLine = null, int? endLine = null) => _inner.ReadFileLines(path, startLine, endLine);
+        public void WriteFile(string path, byte[] content) => _inner.WriteFile(path, content);
+        public void WriteFile(string path, string content) => _inner.WriteFile(path, content);
+        public void DeleteFile(string path) => _inner.DeleteFile(path);
+        public void DeleteDirectory(string path, bool recursive = false) => _inner.DeleteDirectory(path, recursive);
+        public void Delete(string path, bool recursive = false) => _inner.Delete(path, recursive);
+        public void Copy(string source, string destination, bool overwrite = false) => _inner.Copy(source, destination, overwrite);
+        public void Move(string source, string destination, bool overwrite = false) => _inner.Move(source, destination, overwrite);
     }
 
     #endregion

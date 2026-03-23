@@ -11,6 +11,19 @@ public class ExportCommand : IShellCommand
 
     public ShellResult Execute(string[] args, IShellContext context)
     {
+        if (args.Length == 0)
+        {
+            return ShellResult.Error("export: missing assignment");
+        }
+
+        foreach (var arg in args)
+        {
+            if (!arg.Contains('='))
+            {
+                return ShellResult.Error($"export: invalid assignment '{arg}'");
+            }
+        }
+
         foreach (var arg in args)
         {
             var parts = arg.Split('=', 2);
