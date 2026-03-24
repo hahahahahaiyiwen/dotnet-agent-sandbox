@@ -92,6 +92,18 @@ public class GrepCommand : IShellCommand
             }
         }
 
+        if (options.AfterContext < 0 || options.BeforeContext < 0 || options.MaxCount < 0)
+            return ShellResult.Error("grep: invalid numeric option");
+
+        for (int i = 0; i < args.Length - 1; i++)
+        {
+            if ((args[i] == "-A" || args[i] == "-B" || args[i] == "-C" || args[i] == "-m")
+                && !int.TryParse(args[i + 1], out _))
+            {
+                return ShellResult.Error("grep: invalid numeric option");
+            }
+        }
+
         if (nonFlagArgs.Count < 2)
             return ShellResult.Error("grep: missing pattern or file");
 

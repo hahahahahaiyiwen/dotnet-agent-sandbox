@@ -7,6 +7,8 @@ namespace AgentSandbox.Core.Shell.Commands;
 /// </summary>
 public class TailCommand : IShellCommand
 {
+    private const int MaxSupportedLines = 1_000_000;
+
     public string Name => "tail";
     public string Description => "Show last lines of file";
     public string Usage => """
@@ -25,7 +27,10 @@ public class TailCommand : IShellCommand
         {
             if (args[i] == "-n" && i + 1 < args.Length)
             {
-                int.TryParse(args[++i], out maxLines);
+                if (!int.TryParse(args[++i], out maxLines))
+                {
+                    return ShellResult.Error("tail: invalid number of lines");
+                }
             }
             else if (!args[i].StartsWith('-'))
             {
@@ -37,6 +42,9 @@ public class TailCommand : IShellCommand
             return ShellResult.Error("tail: missing file operand");
 
         if (maxLines < 0)
+            return ShellResult.Error("tail: invalid number of lines");
+
+        if (maxLines > MaxSupportedLines)
             return ShellResult.Error("tail: invalid number of lines");
 
         if (maxLines == 0)

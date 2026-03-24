@@ -25,7 +25,10 @@ public class HeadCommand : IShellCommand
         {
             if (args[i] == "-n" && i + 1 < args.Length)
             {
-                int.TryParse(args[++i], out maxLines);
+                if (!int.TryParse(args[++i], out maxLines) || maxLines < 0)
+                {
+                    return ShellResult.Error("head: invalid number of lines");
+                }
             }
             else if (!args[i].StartsWith('-'))
             {
@@ -36,14 +39,18 @@ public class HeadCommand : IShellCommand
         if (paths.Count == 0)
             return ShellResult.Error("head: missing file operand");
 
+        if (maxLines == 0)
+            return ShellResult.Ok(string.Empty);
+
         var output = new StringBuilder();
         foreach (var p in paths)
         {
             if (!ShellCommandFileGuards.TryResolveReadableFilePath(context, Name, p, out var path, out var errorMessage))
                 return ShellResult.Error(errorMessage);
-            
+            int? endLine = maxLines == int.MaxValue ? null : maxLines + 1;
+
             var count = 0;
-            foreach (var line in context.FileSystem.ReadFileLines(path, endLine: maxLines + 1))
+            foreach (var line in context.FileSystem.ReadFileLines(path, endLine: endLine))
             {
                 if (count > 0) output.AppendLine();
                 output.Append(line);
