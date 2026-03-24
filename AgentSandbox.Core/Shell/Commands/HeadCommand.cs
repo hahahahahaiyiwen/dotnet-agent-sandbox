@@ -39,6 +39,9 @@ public class HeadCommand : IShellCommand
         if (paths.Count == 0)
             return ShellResult.Error("head: missing file operand");
 
+        if (maxLines == 0)
+            return ShellResult.Ok(string.Empty);
+
         var output = new StringBuilder();
         foreach (var p in paths)
         {

@@ -249,6 +249,17 @@ public class SandboxShellTests
     }
 
     [Fact]
+    public void Head_ZeroLines_ReturnsEmptyOutput()
+    {
+        _fs.WriteFile("/lines.txt", "line1\nline2\nline3");
+
+        var result = _shell.Execute("head -n 0 /lines.txt");
+
+        Assert.True(result.Success);
+        Assert.Equal(string.Empty, result.Stdout);
+    }
+
+    [Fact]
     public void Tail_ShowsLastLines()
     {
         _fs.WriteFile("/lines.txt", "line1\nline2\nline3\nline4\nline5");
