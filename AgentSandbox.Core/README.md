@@ -183,7 +183,7 @@ Console.WriteLine(skills[0].Metadata.Instructions);
 sandbox.Execute("sh /skills/python-dev/scripts/setup.sh");
 ```
 
-`GetSkills()` returns a cache snapshot from the latest `LoadSkills()` call. If the configured `AgentSkills.BasePath` is missing or inaccessible, `LoadSkills()` returns an empty result and clears previously loaded skills to prevent stale skill exposure.
+`GetSkills()` returns a cache snapshot of the skills discovered during the most recent discovery pass (performed during sandbox initialization after configured imports are applied). If the configured `AgentSkills.BasePath` is missing or inaccessible, discovery returns an empty result and clears previously loaded skills to prevent stale skill exposure.
 
 ## Built-in Commands
 
