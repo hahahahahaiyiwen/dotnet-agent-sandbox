@@ -12,7 +12,7 @@ namespace AgentSandbox.Core.Importing;
 internal class SkillManager
 {
     private readonly FileSystem.FileSystem _fileSystem;
-    private readonly List<SkillInfo> _loadedSkills = new();
+    private IReadOnlyList<SkillInfo> _loadedSkills = Array.Empty<SkillInfo>();
 
     public SkillManager(FileSystem.FileSystem fileSystem)
     {
@@ -35,7 +35,10 @@ internal class SkillManager
 
         // Ensure base path exists
         if (!_fileSystem.Exists(basePath))
-            return Array.Empty<SkillInfo>();
+        {
+            _loadedSkills = Array.Empty<SkillInfo>();
+            return _loadedSkills;
+        }
 
         var skills = new List<SkillInfo>();
 
@@ -65,14 +68,14 @@ internal class SkillManager
         catch (DirectoryNotFoundException)
         {
             // BasePath doesn't exist, return empty list
-            return Array.Empty<SkillInfo>();
+            _loadedSkills = Array.Empty<SkillInfo>();
+            return _loadedSkills;
         }
 
-        // Cache the loaded skills
-        _loadedSkills.Clear();
-        _loadedSkills.AddRange(skills);
-
-        return skills.AsReadOnly();
+        // Atomically publish a new immutable snapshot for readers.
+        var snapshot = skills.AsReadOnly();
+        _loadedSkills = snapshot;
+        return snapshot;
     }
 
     /// <summary>
@@ -106,7 +109,7 @@ internal class SkillManager
     /// <summary>
     /// Gets information about all loaded skills.
     /// </summary>
-    public IReadOnlyList<SkillInfo> GetSkills() => _loadedSkills.AsReadOnly();
+    public IReadOnlyList<SkillInfo> GetSkills() => _loadedSkills;
 
     /// <summary>
     /// Gets a description of loaded skills for use in AI function descriptions.
@@ -114,7 +117,9 @@ internal class SkillManager
     /// </summary>
     public string GetSkillsDescription()
     {
-        if (_loadedSkills.Count == 0)
+        var loadedSkills = _loadedSkills;
+
+        if (loadedSkills.Count == 0)
         {
             return "No skills are currently available.";
         }
@@ -122,7 +127,7 @@ internal class SkillManager
         var sb = new StringBuilder();
         sb.AppendLine("<available_skills>");
 
-        foreach (var skill in _loadedSkills)
+        foreach (var skill in loadedSkills)
         {
             sb.AppendLine("  <skill>");
             sb.AppendLine($"    <name>{skill.Name}</name>");
