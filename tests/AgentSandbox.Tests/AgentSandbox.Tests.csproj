@@ -26,5 +26,14 @@
     <ProjectReference Include="..\..\AgentSandbox.Capabilities.SQL\AgentSandbox.Capabilities.SQL.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <EmbeddedResource Include="TestResources\Embedded\Valid\SKILL.md" LogicalName="AgentSandbox.Tests.TestResources.Embedded.Valid.SKILL.md" />
+    <EmbeddedResource Include="TestResources\Embedded\Valid\scripts\setup.sh" LogicalName="AgentSandbox.Tests.TestResources.Embedded.Valid.scripts.setup.sh" />
+    <EmbeddedResource Include="TestResources\Embedded\Valid\references\docs\notes.md" LogicalName="AgentSandbox.Tests.TestResources.Embedded.Valid.references.docs.notes.md" />
+    <EmbeddedResource Include="TestResources\Embedded\Valid\backups\archive.tar.gz" LogicalName="AgentSandbox.Tests.TestResources.Embedded.Valid.backups.archive.tar.gz" />
+    <EmbeddedResource Include="TestResources\Embedded\Valid\types\index.d.ts" LogicalName="AgentSandbox.Tests.TestResources.Embedded.Valid.types.index.d.ts" />
+    <EmbeddedResource Include="TestResources\Embedded\Invalid\SKILL.md" LogicalName="AgentSandbox.Tests.TestResources.Embedded.Invalid.SKILL.md" />
+  </ItemGroup>
+
 </Project>
 

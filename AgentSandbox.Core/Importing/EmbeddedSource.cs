@@ -8,6 +8,30 @@ namespace AgentSandbox.Core.Importing;
 /// </summary>
 public class EmbeddedSource : IFileSource
 {
+    private static readonly HashSet<string> CompoundTwoPartExtensions = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "tar.gz",
+        "tar.bz2",
+        "tar.xz",
+        "tar.zst",
+        "d.ts",
+        "min.js",
+        "min.css",
+        "bundle.js",
+        "bundle.css",
+        "spec.js",
+        "spec.ts",
+        "test.js",
+        "test.ts"
+    };
+
+    private static readonly HashSet<string> CompoundThreePartExtensions = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "d.ts.map",
+        "min.js.map",
+        "min.css.map"
+    };
+
     private readonly Assembly _assembly;
     private readonly string _resourcePrefix;
 
@@ -67,10 +91,30 @@ public class EmbeddedSource : IFileSource
             return path;
         }
 
-        // Rebuild path: all parts except last two are directories
-        // Last two parts are filename.extension
-        var dirs = parts.Take(parts.Length - 2);
-        var fileName = parts[^2] + "." + parts[^1];
+        // Rebuild path: all parts except filename segments are directories.
+        // Default filename shape is name.ext (2 segments), with support for common
+        // compound extensions such as .tar.gz and .d.ts.
+        var fileSegmentCount = 2;
+        if (parts.Length >= 4)
+        {
+            var threePartExtension = $"{parts[^3]}.{parts[^2]}.{parts[^1]}";
+            if (CompoundThreePartExtensions.Contains(threePartExtension))
+            {
+                fileSegmentCount = 4;
+            }
+        }
+
+        if (fileSegmentCount == 2 && parts.Length >= 3)
+        {
+            var twoPartExtension = $"{parts[^2]}.{parts[^1]}";
+            if (CompoundTwoPartExtensions.Contains(twoPartExtension))
+            {
+                fileSegmentCount = 3;
+            }
+        }
+
+        var dirs = parts.Take(parts.Length - fileSegmentCount);
+        var fileName = string.Join(".", parts.Skip(parts.Length - fileSegmentCount));
 
         var dirPath = string.Join("/", dirs);
         return string.IsNullOrEmpty(dirPath) ? fileName : $"{dirPath}/{fileName}";
