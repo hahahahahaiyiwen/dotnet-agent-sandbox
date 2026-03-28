@@ -25,8 +25,13 @@ public class AgentSkill
     /// </summary>
     /// <param name="path">Path to the skill folder containing SKILL.md.</param>
     /// <param name="name">Optional name override. If not provided, uses name from SKILL.md.</param>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="path"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentException">Thrown when <paramref name="path"/> is empty or whitespace.</exception>
+    /// <exception cref="DirectoryNotFoundException">Thrown when the directory at <paramref name="path"/> does not exist.</exception>
     public static AgentSkill FromPath(string path, string? name = null)
     {
+        ArgumentException.ThrowIfNullOrWhiteSpace(path);
+
         return new AgentSkill
         {
             Name = name,
@@ -43,8 +48,13 @@ public class AgentSkill
     /// Resources should be embedded with names like "MyApp.Skills.PythonDev.SKILL.md".
     /// </param>
     /// <param name="name">Optional name override. If not provided, uses name from SKILL.md.</param>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="assembly"/> or <paramref name="resourcePrefix"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentException">Thrown when <paramref name="resourcePrefix"/> is empty or whitespace.</exception>
     public static AgentSkill FromAssembly(Assembly assembly, string resourcePrefix, string? name = null)
     {
+        ArgumentNullException.ThrowIfNull(assembly);
+        ArgumentException.ThrowIfNullOrWhiteSpace(resourcePrefix);
+
         return new AgentSkill
         {
             Name = name,
@@ -57,8 +67,11 @@ public class AgentSkill
     /// </summary>
     /// <param name="files">Dictionary of relative path to file content.</param>
     /// <param name="name">Optional name override. If not provided, uses name from SKILL.md.</param>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="files"/> is <see langword="null"/>.</exception>
     public static AgentSkill FromFiles(IDictionary<string, string> files, string? name = null)
     {
+        ArgumentNullException.ThrowIfNull(files);
+
         return new AgentSkill
         {
             Name = name,
@@ -71,8 +84,11 @@ public class AgentSkill
     /// </summary>
     /// <param name="source">The file source.</param>
     /// <param name="name">Optional name override. If not provided, uses name from SKILL.md.</param>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="source"/> is <see langword="null"/>.</exception>
     public static AgentSkill FromSource(IFileSource source, string? name = null)
     {
+        ArgumentNullException.ThrowIfNull(source);
+
         return new AgentSkill
         {
             Name = name,

@@ -185,6 +185,8 @@ sandbox.Execute("sh /skills/python-dev/scripts/setup.sh");
 
 `GetSkills()` returns a cache snapshot of the skills discovered during the most recent discovery pass (performed during sandbox initialization after configured imports are applied). If the configured `AgentSkills.BasePath` is missing or inaccessible, discovery returns an empty result and clears previously loaded skills to prevent stale skill exposure.
 
+`AgentSkill` factory helpers (`FromPath`, `FromAssembly`, `FromFiles`, `FromSource`) validate required inputs and throw argument exceptions for null/blank values before creating source adapters.
+
 ## Built-in Commands
 
 | Command | Description |
