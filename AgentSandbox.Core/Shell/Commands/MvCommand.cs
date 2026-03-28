@@ -26,7 +26,9 @@ public class MvCommand : IShellCommand
             var srcPath = context.ResolvePath(src);
             
             if (!context.FileSystem.Exists(srcPath))
-                return ShellResult.Error($"mv: cannot stat '{src}': No such file or directory");
+                return MultiTargetCommandFailurePolicy.FailFast(
+                    $"mv: cannot stat '{src}': No such file or directory",
+                    sources.Count);
 
             var targetPath = context.FileSystem.IsDirectory(dest) 
                 ? dest + "/" + FileSystemPath.GetName(srcPath) 

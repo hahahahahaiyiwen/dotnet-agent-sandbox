@@ -32,10 +32,14 @@ public class CpCommand : IShellCommand
             var srcPath = context.ResolvePath(src);
             
             if (!context.FileSystem.Exists(srcPath))
-                return ShellResult.Error($"cp: cannot stat '{src}': No such file or directory");
+                return MultiTargetCommandFailurePolicy.FailFast(
+                    $"cp: cannot stat '{src}': No such file or directory",
+                    sources.Count);
 
             if (context.FileSystem.IsDirectory(srcPath) && !recursive)
-                return ShellResult.Error($"cp: -r not specified; omitting directory '{src}'");
+                return MultiTargetCommandFailurePolicy.FailFast(
+                    $"cp: -r not specified; omitting directory '{src}'",
+                    sources.Count);
 
             var targetPath = context.FileSystem.IsDirectory(dest) 
                 ? dest + "/" + FileSystemPath.GetName(srcPath) 

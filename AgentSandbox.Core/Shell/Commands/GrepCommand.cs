@@ -225,7 +225,10 @@ public class GrepCommand : IShellCommand
             }
             catch (FileNotFoundException)
             {
-                return ShellResult.Error($"grep: {displayPath}: No such file or directory");
+                return MultiTargetCommandFailurePolicy.FailFast(
+                    $"grep: {displayPath}: No such file or directory",
+                    filePaths.Count,
+                    () => output.ToString().TrimEnd());
             }
         }
 

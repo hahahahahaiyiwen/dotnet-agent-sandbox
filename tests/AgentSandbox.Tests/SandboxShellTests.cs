@@ -142,6 +142,20 @@ public class SandboxShellTests
     }
 
     [Fact]
+    public void Ls_MultiplePaths_LaterFailure_KeepsPriorOutputBeforeFailure()
+    {
+        _fs.WriteFile("/dir1/a.txt", "a");
+        _fs.WriteFile("/dir2/b.txt", "b");
+
+        var result = _shell.Execute("ls /dir1 /missing /dir2");
+
+        Assert.False(result.Success);
+        Assert.Contains("a.txt", result.Stdout, StringComparison.Ordinal);
+        Assert.DoesNotContain("b.txt", result.Stdout, StringComparison.Ordinal);
+        Assert.Contains("missing", result.Stderr, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Rm_RemovesFile()
     {
         _fs.WriteFile("/delete.txt", "x");
@@ -161,6 +175,33 @@ public class SandboxShellTests
         
         Assert.True(result.Success);
         Assert.False(_fs.Exists("/dir"));
+    }
+
+    [Fact]
+    public void Rm_MultiplePaths_LaterFailure_KeepsEarlierDelete()
+    {
+        _fs.WriteFile("/a.txt", "a");
+        _fs.WriteFile("/b.txt", "b");
+
+        var result = _shell.Execute("rm /a.txt /missing.txt /b.txt");
+
+        Assert.False(result.Success);
+        Assert.False(_fs.Exists("/a.txt"));
+        Assert.True(_fs.Exists("/b.txt"));
+        Assert.Contains("missing.txt", result.Stderr, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Rm_Force_MultiplePaths_SkipsMissingAndContinues()
+    {
+        _fs.WriteFile("/a.txt", "a");
+        _fs.WriteFile("/b.txt", "b");
+
+        var result = _shell.Execute("rm -f /a.txt /missing.txt /b.txt");
+
+        Assert.True(result.Success);
+        Assert.False(_fs.Exists("/a.txt"));
+        Assert.False(_fs.Exists("/b.txt"));
     }
 
     [Fact]
@@ -225,6 +266,22 @@ public class SandboxShellTests
     }
 
     [Fact]
+    public void Mv_MultipleSources_LaterFailure_KeepsEarlierMovedFile()
+    {
+        _fs.WriteFile("/s1.txt", "one");
+        _fs.WriteFile("/s2.txt", "two");
+        _fs.CreateDirectory("/dest");
+
+        var result = _shell.Execute("mv /s1.txt /missing.txt /s2.txt /dest");
+
+        Assert.False(result.Success);
+        Assert.True(_fs.Exists("/dest/s1.txt"));
+        Assert.False(_fs.Exists("/s1.txt"));
+        Assert.True(_fs.Exists("/s2.txt"));
+        Assert.Contains("missing.txt", result.Stderr, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Head_ShowsFirstLines()
     {
         _fs.WriteFile("/lines.txt", "line1\nline2\nline3\nline4\nline5");
@@ -260,6 +317,19 @@ public class SandboxShellTests
     }
 
     [Fact]
+    public void Head_MultipleFiles_LaterFailure_KeepsPriorOutputBeforeFailure()
+    {
+        _fs.WriteFile("/a.txt", "A1\nA2");
+        _fs.WriteFile("/c.txt", "C1\nC2");
+
+        var result = _shell.Execute("head -n 1 /a.txt /missing.txt /c.txt");
+
+        Assert.False(result.Success);
+        Assert.Equal("A1", result.Stdout.Replace("\r\n", "\n"));
+        Assert.Contains("missing.txt", result.Stderr, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Tail_ShowsLastLines()
     {
         _fs.WriteFile("/lines.txt", "line1\nline2\nline3\nline4\nline5");
@@ -292,6 +362,19 @@ public class SandboxShellTests
 
         Assert.True(result.Success);
         Assert.Equal(string.Empty, result.Stdout);
+    }
+
+    [Fact]
+    public void Tail_MultipleFiles_LaterFailure_KeepsPriorOutputBeforeFailure()
+    {
+        _fs.WriteFile("/a.txt", "A1\nA2");
+        _fs.WriteFile("/c.txt", "C1\nC2");
+
+        var result = _shell.Execute("tail -n 1 /a.txt /missing.txt /c.txt");
+
+        Assert.False(result.Success);
+        Assert.Equal("A2", result.Stdout.Replace("\r\n", "\n"));
+        Assert.Contains("missing.txt", result.Stderr, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -399,6 +482,20 @@ public class SandboxShellTests
 
         Assert.False(result.Success);
         Assert.Contains("grep: missing pattern or file", result.Stderr, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Grep_MultipleFiles_LaterFailure_KeepsPriorOutputBeforeFailure()
+    {
+        _fs.WriteFile("/a.txt", "apple\nbanana");
+        _fs.WriteFile("/c.txt", "apple");
+
+        var result = _shell.Execute("grep apple /a.txt /missing.txt /c.txt");
+
+        Assert.False(result.Success);
+        Assert.Contains("/a.txt:apple", result.Stdout, StringComparison.Ordinal);
+        Assert.DoesNotContain("/c.txt:apple", result.Stdout, StringComparison.Ordinal);
+        Assert.Contains("missing.txt", result.Stderr, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -758,6 +855,21 @@ public class SandboxShellTests
         Assert.True(result.Success);
         Assert.Contains("3", result.Stdout, StringComparison.Ordinal);
         Assert.Contains("/windows.txt", result.Stdout, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Wc_MultipleFiles_LaterFailure_KeepsPriorOutputBeforeFailure()
+    {
+        _fs.WriteFile("/a.txt", "one\ntwo");
+        _fs.WriteFile("/c.txt", "three");
+
+        var result = _shell.Execute("wc /a.txt /missing.txt /c.txt");
+
+        Assert.False(result.Success);
+        Assert.Contains("/a.txt", result.Stdout, StringComparison.Ordinal);
+        Assert.DoesNotContain("total", result.Stdout, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("/c.txt", result.Stdout, StringComparison.Ordinal);
+        Assert.Contains("missing.txt", result.Stderr, StringComparison.Ordinal);
     }
 
     [Fact]

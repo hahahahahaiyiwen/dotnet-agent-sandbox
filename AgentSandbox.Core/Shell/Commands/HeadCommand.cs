@@ -46,7 +46,10 @@ public class HeadCommand : IShellCommand
         foreach (var p in paths)
         {
             if (!ShellCommandFileGuards.TryResolveReadableFilePath(context, Name, p, out var path, out var errorMessage))
-                return ShellResult.Error(errorMessage);
+                return MultiTargetCommandFailurePolicy.FailFast(
+                    errorMessage,
+                    paths.Count,
+                    () => output.ToString().TrimEnd());
             int? endLine = maxLines == int.MaxValue ? null : maxLines + 1;
 
             var count = 0;
