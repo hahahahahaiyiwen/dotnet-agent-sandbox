@@ -18,12 +18,10 @@ public class CatCommand : IShellCommand
         foreach (var file in args)
         {
             if (!ShellCommandFileGuards.TryResolveReadableFilePath(context, Name, file, out var path, out var errorMessage))
-                return new ShellResult
-                {
-                    ExitCode = 1,
-                    Stdout = string.Join("\n", parts),
-                    Stderr = errorMessage
-                };
+                return MultiTargetCommandFailurePolicy.FailFast(
+                    errorMessage,
+                    args.Length,
+                    () => string.Join("\n", parts));
 
             // Use ReadFile() - IFileSystem handles UTF-8 decoding, no manual conversion needed
             parts.Add(context.FileSystem.ReadFile(path));

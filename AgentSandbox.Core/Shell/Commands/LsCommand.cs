@@ -42,7 +42,10 @@ public class LsCommand : IShellCommand
             
             if (!context.FileSystem.Exists(path))
             {
-                return ShellResult.Error($"ls: cannot access '{p}': No such file or directory");
+                return MultiTargetCommandFailurePolicy.FailFast(
+                    $"ls: cannot access '{p}': No such file or directory",
+                    paths.Count,
+                    () => output.ToString().TrimEnd());
             }
 
             if (recursive)

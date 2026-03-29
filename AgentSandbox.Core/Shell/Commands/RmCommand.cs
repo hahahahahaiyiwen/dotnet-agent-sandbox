@@ -31,7 +31,9 @@ public class RmCommand : IShellCommand
             if (!context.FileSystem.Exists(path))
             {
                 if (!force)
-                    return ShellResult.Error($"rm: cannot remove '{p}': No such file or directory");
+                    return MultiTargetCommandFailurePolicy.FailFast(
+                        $"rm: cannot remove '{p}': No such file or directory",
+                        paths.Count);
                 continue;
             }
 
@@ -41,7 +43,9 @@ public class RmCommand : IShellCommand
             }
             catch (InvalidOperationException ex)
             {
-                return ShellResult.Error($"rm: {ex.Message}");
+                return MultiTargetCommandFailurePolicy.FailFast(
+                    $"rm: {ex.Message}",
+                    paths.Count);
             }
         }
 

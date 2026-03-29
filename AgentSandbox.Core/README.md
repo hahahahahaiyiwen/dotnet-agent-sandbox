@@ -213,6 +213,16 @@ sandbox.Execute("sh /skills/python-dev/scripts/setup.sh");
 - Glob patterns: `*.txt`, `src/**/*.cs`
 - Shell scripts: `sh script.sh` or `./script.sh`
 
+### Multi-file Failure Policy Matrix
+
+Multi-target command behavior is intentionally policy-driven through shared failure handling in shell command implementations:
+
+| Command group | Commands | Failure strategy | Partial stdout on error | Side effects before failure |
+|---|---|---|---|---|
+| Read-oriented | `cat`, `head`, `tail`, `wc`, `grep`, `ls` | Fail fast on first failing input | Preserved for already-processed inputs | N/A |
+| Mutating copy/move | `cp`, `mv` | Fail fast on first failing input | None | Preserved (already-applied changes are not rolled back) |
+| Mutating delete | `rm` | Fail fast by default; `-f` continues past missing paths | None | Preserved (already-deleted paths stay deleted) |
+
 **Not Supported:**
 - Pipelines (`|`) - use file arguments instead: `grep pattern file.txt`
 - Command chaining with `||` - run fallback commands separately or use scripts

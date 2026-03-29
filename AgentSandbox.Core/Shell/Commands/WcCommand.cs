@@ -24,7 +24,10 @@ public class WcCommand : IShellCommand
         foreach (var p in paths)
         {
             if (!ShellCommandFileGuards.TryResolveReadableFilePath(context, Name, p, out var path, out var errorMessage))
-                return ShellResult.Error(errorMessage);
+                return MultiTargetCommandFailurePolicy.FailFast(
+                    errorMessage,
+                    paths.Count,
+                    () => output.ToString().TrimEnd());
 
             var fileBytes = context.FileSystem.ReadFileBytes(path);
             var fileContent = Encoding.UTF8.GetString(fileBytes);
