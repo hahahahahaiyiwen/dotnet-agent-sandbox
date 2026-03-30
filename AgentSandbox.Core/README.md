@@ -209,6 +209,7 @@ sandbox.Execute("sh /skills/python-dev/scripts/setup.sh");
 
 **Shell Features:**
 - Output redirection: `>` (write) and `>>` (append)
+- Command sequencing: `;` (always run next command) and `&&` (run next command on success)
 - Environment variables: `$VAR`, `$HOME`
 - Glob patterns: `*.txt`, `src/**/*.cs`
 - Shell scripts: `sh script.sh` or `./script.sh`
