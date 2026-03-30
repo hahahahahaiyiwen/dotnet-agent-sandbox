@@ -934,7 +934,7 @@ public class Sandbox : IDisposable, IObservableSandbox
             }
 
             sandbox.ExitOperationGate();
-            Volatile.Write(ref sandbox._timedOutCommandTask, null);
+            Interlocked.CompareExchange(ref sandbox._timedOutCommandTask, null, task);
         }, this, CancellationToken.None, TaskContinuationOptions.ExecuteSynchronously, TaskScheduler.Default);
     }
 
@@ -954,7 +954,7 @@ public class Sandbox : IDisposable, IObservableSandbox
                 sandbox._telemetry.RecordCommandError(task.Exception.GetBaseException());
             }
 
-            Volatile.Write(ref sandbox._timedOutCommandTask, null);
+            Interlocked.CompareExchange(ref sandbox._timedOutCommandTask, null, task);
         }, this, CancellationToken.None, TaskContinuationOptions.ExecuteSynchronously, TaskScheduler.Default);
     }
 
