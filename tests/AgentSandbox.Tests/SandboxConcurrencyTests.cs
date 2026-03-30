@@ -114,6 +114,40 @@ public class SandboxConcurrencyTests
     }
 
     [Fact]
+    public void Timeout_BlocksOperationGateApisUntilBackgroundCommandCompletes()
+    {
+        using var sandbox = new Sandbox(options: new SandboxOptions
+        {
+            CommandTimeout = TimeSpan.FromMilliseconds(20),
+            ShellExtensions = [new SlowCommand()]
+        });
+
+        var timeoutResult = sandbox.Execute("slow 200");
+        Assert.False(timeoutResult.Success);
+        Assert.Contains("timed out", timeoutResult.Stderr, StringComparison.OrdinalIgnoreCase);
+
+        var blocked = Assert.Throws<InvalidOperationException>(() => sandbox.GetBashToolDescription());
+        Assert.Contains("timed-out command", blocked.Message, StringComparison.OrdinalIgnoreCase);
+
+        var wait = Stopwatch.StartNew();
+        while (true)
+        {
+            try
+            {
+                var description = sandbox.GetBashToolDescription();
+                Assert.Contains("Available commands", description, StringComparison.OrdinalIgnoreCase);
+                break;
+            }
+            catch (InvalidOperationException ex) when (
+                IsPhase1BusyError(ex) &&
+                wait.Elapsed < TimeSpan.FromSeconds(2))
+            {
+                Thread.Sleep(20);
+            }
+        }
+    }
+
+    [Fact]
     public void Dispose_WhenTimedOutCommandIsRunning_DoesNotThrow_AndRejectsNewOperations()
     {
         using var sandbox = new Sandbox(options: new SandboxOptions
@@ -256,6 +290,41 @@ public class SandboxConcurrencyTests
 
         var persisted = string.Join("\n", sandbox.ReadFileLines("/after-timeout.txt"));
         Assert.Equal("ready", persisted);
+    }
+
+    [Fact]
+    public void IsolatedTimeout_BlocksOperationGateApisUntilBackgroundCommandCompletes()
+    {
+        using var sandbox = new Sandbox(options: new SandboxOptions
+        {
+            EnableIsolatedParallelCommandExecution = true,
+            CommandTimeout = TimeSpan.FromMilliseconds(20),
+            ShellExtensions = [new ParallelSafeSlowCommand()]
+        });
+
+        var timeoutResult = sandbox.Execute("pslow 200");
+        Assert.False(timeoutResult.Success);
+        Assert.Contains("timed out", timeoutResult.Stderr, StringComparison.OrdinalIgnoreCase);
+
+        var blocked = Assert.Throws<InvalidOperationException>(() => sandbox.GetBashToolDescription());
+        Assert.Contains("timed-out command", blocked.Message, StringComparison.OrdinalIgnoreCase);
+
+        var wait = Stopwatch.StartNew();
+        while (true)
+        {
+            try
+            {
+                var description = sandbox.GetBashToolDescription();
+                Assert.Contains("Available commands", description, StringComparison.OrdinalIgnoreCase);
+                break;
+            }
+            catch (InvalidOperationException ex) when (
+                IsPhase1BusyError(ex) &&
+                wait.Elapsed < TimeSpan.FromSeconds(2))
+            {
+                Thread.Sleep(20);
+            }
+        }
     }
 
     [Fact]

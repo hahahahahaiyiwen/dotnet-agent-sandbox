@@ -820,6 +820,7 @@ public class Sandbox : IDisposable, IObservableSandbox
     private void EnterOperationGate()
     {
         ThrowIfDisposed();
+        ThrowIfTimedOutCommandInProgress();
 
         if (Interlocked.CompareExchange(ref _operationInProgress, 1, 0) != 0)
         {
@@ -837,6 +838,21 @@ public class Sandbox : IDisposable, IObservableSandbox
         {
             ExitOperationGate();
             throw new ObjectDisposedException(nameof(Sandbox));
+        }
+
+        if (_options.EnableIsolatedParallelCommandExecution)
+        {
+            try
+            {
+                // Isolated timeout tracking does not hold the operation gate.
+                // Re-check after acquisition to close races with that path.
+                ThrowIfTimedOutCommandInProgress();
+            }
+            catch
+            {
+                ExitOperationGate();
+                throw;
+            }
         }
     }
 
@@ -901,14 +917,13 @@ public class Sandbox : IDisposable, IObservableSandbox
 
     private void TrackTimedOutCommand(Task<ShellResult> executionTask)
     {
-        Volatile.Write(ref _timedOutCommandTask, executionTask);
         if (executionTask.IsCompleted)
         {
-            Volatile.Write(ref _timedOutCommandTask, null);
             ExitOperationGate();
             return;
         }
 
+        Volatile.Write(ref _timedOutCommandTask, executionTask);
         executionTask.ContinueWith(static (task, state) =>
         {
             var sandbox = (Sandbox)state!;
@@ -918,20 +933,19 @@ public class Sandbox : IDisposable, IObservableSandbox
                 sandbox._telemetry.RecordCommandError(task.Exception.GetBaseException());
             }
 
-            Volatile.Write(ref sandbox._timedOutCommandTask, null);
             sandbox.ExitOperationGate();
+            Volatile.Write(ref sandbox._timedOutCommandTask, null);
         }, this, CancellationToken.None, TaskContinuationOptions.ExecuteSynchronously, TaskScheduler.Default);
     }
 
     private void TrackTimedOutIsolatedCommand(Task<ShellResult> executionTask)
     {
-        Volatile.Write(ref _timedOutCommandTask, executionTask);
         if (executionTask.IsCompleted)
         {
-            Volatile.Write(ref _timedOutCommandTask, null);
             return;
         }
 
+        Volatile.Write(ref _timedOutCommandTask, executionTask);
         executionTask.ContinueWith(static (task, state) =>
         {
             var sandbox = (Sandbox)state!;

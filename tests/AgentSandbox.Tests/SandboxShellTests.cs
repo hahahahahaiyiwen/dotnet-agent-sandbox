@@ -583,6 +583,21 @@ public class SandboxShellTests
         Assert.Contains("Command chaining (||) is not supported", result.Stderr);
     }
 
+    [Theory]
+    [InlineData("echo a | cat", "Pipelines are not supported")]
+    [InlineData("cat < /tmp.txt", "Input redirection (<) is not supported")]
+    [InlineData("cat << EOF", "Heredoc (<<) is not supported")]
+    [InlineData("echo hi &", "Background jobs (&) are not supported")]
+    [InlineData("echo $(pwd)", "Command substitution is not supported")]
+    [InlineData("echo `pwd`", "Command substitution is not supported")]
+    public void UnsupportedOperators_ReturnExplicitGuidance(string commandLine, string expectedMessage)
+    {
+        var result = _shell.Execute(commandLine);
+
+        Assert.False(result.Success);
+        Assert.Contains(expectedMessage, result.Stderr, StringComparison.Ordinal);
+    }
+
     [Fact]
     public void CommandSeparator_Semicolon_ExecutesSequentially()
     {
