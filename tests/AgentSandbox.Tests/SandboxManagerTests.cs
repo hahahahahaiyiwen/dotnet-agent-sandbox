@@ -123,6 +123,32 @@ public class SandboxManagerTests
     }
 
     [Fact]
+    public void Snapshot_And_Restore_PreservesCwdAndUsesAdditiveEnvironmentMerge()
+    {
+        var manager = new SandboxManager();
+        var sandbox = manager.Get();
+
+        sandbox.Execute("mkdir -p /workspace && cd /workspace && export SNAP_VAR=from_snapshot && echo 'base' > state.txt");
+        var snapshot = sandbox.CreateSnapshot();
+        sandbox.Execute("cd / && export SNAP_VAR=mutated && export EXTRA_VAR=persisted && echo 'changed' > /after.txt");
+
+        sandbox.RestoreSnapshot(snapshot);
+
+        var cwd = sandbox.Execute("pwd");
+        Assert.Equal("/workspace", cwd.Stdout.Trim());
+
+        var env = sandbox.Execute("echo $SNAP_VAR-$EXTRA_VAR");
+        Assert.Equal("from_snapshot-persisted", env.Stdout.Trim());
+
+        var restoredFile = sandbox.Execute("cat /workspace/state.txt");
+        Assert.Equal("base", restoredFile.Stdout.Trim());
+
+        var rolledBackFile = sandbox.Execute("cat /after.txt");
+        Assert.False(rolledBackFile.Success);
+        Assert.Contains("No such file", rolledBackFile.Stderr, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public void SaveSnapshot_And_RestoreSnapshot_CreatesNewSandboxId()
     {
         var store = new InMemorySnapshotStore();

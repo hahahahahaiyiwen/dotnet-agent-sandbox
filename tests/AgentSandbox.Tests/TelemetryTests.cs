@@ -213,6 +213,11 @@ public class TelemetryTests
         Assert.Equal("tenant-123", executedEvent.HostCorrelationMetadata!["tenantId"]);
         Assert.Equal("req-456", executedEvent.HostCorrelationMetadata["requestId"]);
 
+        var createdSnapshotEvent = Assert.Single(events.Where(e => e.LifecycleType == SandboxLifecycleType.SnapshotCreated));
+        Assert.Contains(snapshot.Id, createdSnapshotEvent.Details);
+        Assert.Equal("tenant-123", createdSnapshotEvent.HostCorrelationMetadata!["tenantId"]);
+        Assert.Equal("req-456", createdSnapshotEvent.HostCorrelationMetadata["requestId"]);
+
         var restoreEvent = Assert.Single(events.Where(e => e.LifecycleType == SandboxLifecycleType.SnapshotRestored));
         Assert.Contains(snapshot.Id, restoreEvent.Details);
         Assert.Equal("tenant-123", restoreEvent.HostCorrelationMetadata!["tenantId"]);

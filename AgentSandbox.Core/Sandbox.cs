@@ -706,7 +706,7 @@ public class Sandbox : IDisposable, IObservableSandbox
             var fileSystemData = _fileSystem.CreateSnapshot();
             var createdAt = DateTime.UtcNow;
             var stats = BuildStatsUnsafe();
-            return new SandboxSnapshot
+            var snapshot = new SandboxSnapshot
             {
                 Id = Id,
                 FileSystemData = fileSystemData,
@@ -723,6 +723,9 @@ public class Sandbox : IDisposable, IObservableSandbox
                     SourceSessionId = Id
                 }
             };
+
+            _telemetry.RecordSnapshotCreated(snapshot.Id);
+            return snapshot;
         }
         finally
         {

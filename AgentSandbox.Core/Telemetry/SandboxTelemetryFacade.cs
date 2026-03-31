@@ -79,6 +79,19 @@ internal sealed class SandboxTelemetryFacade
     }
 
     /// <summary>
+    /// Records sandbox snapshot creation lifecycle audit event.
+    /// </summary>
+    public void RecordSnapshotCreated(string? snapshotId = null)
+    {
+        if (!TelemetryEnabled)
+            return;
+
+        EmitLifecycleEvent(
+            SandboxLifecycleType.SnapshotCreated,
+            snapshotId is null ? null : $"snapshotId={snapshotId}");
+    }
+
+    /// <summary>
     /// Records sandbox snapshot restore lifecycle audit event.
     /// </summary>
     public void RecordSnapshotRestored(string? snapshotId = null)
