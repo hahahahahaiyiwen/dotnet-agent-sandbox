@@ -93,6 +93,7 @@ var sandbox = new Sandbox("agent-1", options);
 ```
 
 `ReadFileLines`, `WriteFile`, and `ApplyPatch` reject path inputs that contain `..` traversal segments.
+`ReadFileLines` returns a materialized line snapshot captured at call time (it is not a lazy streaming cursor).
 
 ### Secret Policy Model
 

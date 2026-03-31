@@ -202,6 +202,18 @@ public class SandboxFileIOTests : IDisposable
         Assert.Equal("Middle", lines[2]);
     }
 
+    [Fact]
+    public void ReadFileLines_ReturnsMaterializedSnapshot_IndependentOfSubsequentWrites()
+    {
+        _sandbox.WriteFile("/snapshot.txt", "line 1\nline 2");
+
+        var snapshot = _sandbox.ReadFileLines("/snapshot.txt");
+
+        _sandbox.WriteFile("/snapshot.txt", "changed");
+
+        Assert.Equal(["line 1", "line 2"], snapshot.ToArray());
+    }
+
     #endregion
 
     #region Lazy Line Scanning Tests (comprehensive coverage)
@@ -668,6 +680,22 @@ public class SandboxFileIOTests : IDisposable
 ";
 
         Assert.Throws<InvalidOperationException>(() => _sandbox.ApplyPatch("/file.txt", patch));
+    }
+
+    [Fact]
+    public void ApplyPatch_ThrowsArgumentException_OnInvalidHunkHeader()
+    {
+        _sandbox.WriteFile("/file.txt", "Line 1");
+
+        var patch = @"--- a/file.txt
++++ b/file.txt
+@@ invalid hunk @@
+ Line 1
+";
+
+        var ex = Assert.Throws<ArgumentException>(() => _sandbox.ApplyPatch("/file.txt", patch));
+
+        Assert.Contains("Invalid hunk header", ex.Message, StringComparison.Ordinal);
     }
 
     [Fact]

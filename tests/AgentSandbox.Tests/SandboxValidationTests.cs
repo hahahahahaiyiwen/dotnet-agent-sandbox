@@ -53,6 +53,19 @@ public class SandboxValidationTests
     }
 
     [Fact]
+    public void WriteFile_ThrowsDeterministicErrorCode_WhenPayloadTooLarge_WithMultiByteUtf8()
+    {
+        using var sandbox = new Sandbox(options: new SandboxOptions
+        {
+            MaxWritePayloadBytes = 4
+        });
+
+        var ex = Assert.Throws<CoreValidationException>(() => sandbox.WriteFile("/a.txt", "😀😀"));
+
+        Assert.Equal(CoreValidationErrorCodes.WritePayloadTooLarge, ex.ErrorCode);
+    }
+
+    [Fact]
     public void WriteFile_ThrowsArgumentNullException_WhenContentIsNull()
     {
         using var sandbox = new Sandbox();

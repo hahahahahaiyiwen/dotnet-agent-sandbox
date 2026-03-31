@@ -78,6 +78,58 @@ public class SandboxConcurrencyTests
     }
 
     [Fact]
+    public async Task ConcurrentReadAndWrite_AreSerializedWithoutConflictErrors()
+    {
+        using var sandbox = new Sandbox();
+        sandbox.WriteFile("/shared.txt", "seed");
+        using var start = new ManualResetEventSlim(false);
+
+        Exception? readFailure = null;
+        Exception? writeFailure = null;
+
+        var reader = Task.Run(() =>
+        {
+            Assert.True(start.Wait(TimeSpan.FromSeconds(1)));
+            try
+            {
+                for (var i = 0; i < 200; i++)
+                {
+                    _ = sandbox.ReadFileLines("/shared.txt").ToArray();
+                }
+            }
+            catch (Exception ex)
+            {
+                readFailure = ex;
+            }
+        });
+
+        var writer = Task.Run(() =>
+        {
+            Assert.True(start.Wait(TimeSpan.FromSeconds(1)));
+            try
+            {
+                for (var i = 0; i < 100; i++)
+                {
+                    sandbox.WriteFile("/shared.txt", $"value-{i}");
+                }
+            }
+            catch (Exception ex)
+            {
+                writeFailure = ex;
+            }
+        });
+
+        start.Set();
+        await Task.WhenAll(reader, writer);
+
+        Assert.Null(readFailure);
+        Assert.Null(writeFailure);
+
+        var persisted = string.Join("\n", sandbox.ReadFileLines("/shared.txt"));
+        Assert.StartsWith("value-", persisted, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Timeout_BlocksSubsequentOperationsUntilBackgroundCommandCompletes()
     {
         using var sandbox = new Sandbox(options: new SandboxOptions
