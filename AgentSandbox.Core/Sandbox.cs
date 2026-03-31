@@ -397,8 +397,8 @@ public class Sandbox : IDisposable, IObservableSandbox
     #region File System I/O
 
     /// <summary>
-    /// Reads file lines within a range as a lazy-evaluated stream.
-    /// Useful for reading specific line ranges from large files without materializing the entire file.
+    /// Reads file lines within a range and returns a materialized snapshot.
+    /// The returned enumerable is detached from future file mutations.
     /// </summary>
     /// <param name="path">Path to the file to read.</param>
     /// <param name="startLine">Starting line number (1-indexed), inclusive. If null, defaults to 1.</param>
@@ -407,8 +407,7 @@ public class Sandbox : IDisposable, IObservableSandbox
     /// <remarks>
     /// - Line numbers are 1-indexed (first line = 1)
     /// - endLine is exclusive (startLine=1, endLine=4 returns lines 1, 2, 3)
-    /// - Lines are yielded lazily as they're encountered during scanning
-    /// - Enumeration stops as soon as endLine is reached (early termination)
+    /// - Results are materialized before return to keep telemetry and locking deterministic
     /// </remarks>
     /// <exception cref="FileNotFoundException">File does not exist.</exception>
     /// <exception cref="InvalidOperationException">Path is a directory.</exception>
