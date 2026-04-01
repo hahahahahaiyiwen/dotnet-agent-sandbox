@@ -210,6 +210,37 @@ public class AgentSkillsTests
     }
 
     [Fact]
+    public void Sandbox_GetSkills_RemainsStableAcrossSnapshotRestore()
+    {
+        var skillPath = Path.Combine(TestSkillsPath, "test-skill");
+        var options = new SandboxOptions
+        {
+            Imports =
+            [
+                new FileImportOptions
+                {
+                    Path = "/.sandbox/skills/test-skill",
+                    Source = new FileSystemSource(skillPath)
+                }
+            ],
+            AgentSkills = new AgentSkillOptions { BasePath = "/.sandbox/skills" }
+        };
+
+        using var sandbox = new Sandbox(options: options);
+        var initial = sandbox.GetSkills();
+        var snapshot = sandbox.CreateSnapshot();
+
+        sandbox.Execute("mkdir -p /.sandbox/skills/ephemeral");
+        sandbox.WriteFile(
+            "/.sandbox/skills/ephemeral/SKILL.md",
+            "---\nname: ephemeral\ndescription: Ephemeral skill\n---\n");
+        sandbox.RestoreSnapshot(snapshot);
+
+        var afterRestore = sandbox.GetSkills();
+        Assert.Equal(initial.Select(skill => skill.Name), afterRestore.Select(skill => skill.Name));
+    }
+
+    [Fact]
     public void Sandbox_CustomSkillsBasePath()
     {
         var skillPath = Path.Combine(TestSkillsPath, "test-skill");

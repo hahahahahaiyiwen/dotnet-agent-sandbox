@@ -111,7 +111,33 @@ public class SandboxCapabilityTests
 
         var ex = Assert.Throws<InvalidOperationException>(() => new Sandbox(options: options));
 
-        Assert.Contains("init failed", ex.Message);
+        Assert.Contains("failing", ex.Message, StringComparison.Ordinal);
+        Assert.Contains(nameof(FailingCapability), ex.Message, StringComparison.Ordinal);
+        Assert.NotNull(ex.InnerException);
+        Assert.Contains("init failed", ex.InnerException!.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Sandbox_Ctor_WhenCapabilityInitializeFails_DisposesPreviouslyInitializedCapabilitiesInReverseOrder()
+    {
+        var disposeOrder = new List<string>();
+        var first = new OrderedDisposableCapability("first", disposeOrder);
+        var second = new OrderedDisposableCapability("second", disposeOrder);
+        var options = new SandboxOptions
+        {
+            Capabilities =
+            [
+                first,
+                second,
+                new FailingCapability()
+            ]
+        };
+
+        Assert.Throws<InvalidOperationException>(() => new Sandbox(options: options));
+
+        Assert.Equal(1, first.DisposeCount);
+        Assert.Equal(1, second.DisposeCount);
+        Assert.Equal(["second", "first"], disposeOrder);
     }
 
     [Fact]
@@ -193,6 +219,26 @@ public class SandboxCapabilityTests
         }
 
         Assert.Equal(1, disposableCapability.DisposeCount);
+    }
+
+    [Fact]
+    public void Sandbox_Dispose_DisposesCapabilitiesInReverseRegistrationOrder_AndIsIdempotent()
+    {
+        var disposeOrder = new List<string>();
+        var first = new OrderedDisposableCapability("first", disposeOrder);
+        var second = new OrderedDisposableCapability("second", disposeOrder);
+        var options = new SandboxOptions
+        {
+            Capabilities = [first, second]
+        };
+
+        var sandbox = new Sandbox(options: options);
+        sandbox.Dispose();
+        sandbox.Dispose();
+
+        Assert.Equal(1, first.DisposeCount);
+        Assert.Equal(1, second.DisposeCount);
+        Assert.Equal(["second", "first"], disposeOrder);
     }
 
     private sealed class HelloCommand : IShellCommand
@@ -294,6 +340,27 @@ public class SandboxCapabilityTests
         public int DisposeCount { get; private set; }
         public void Initialize(ISandboxContext context) { }
         public void Dispose() => DisposeCount++;
+    }
+
+    private sealed class OrderedDisposableCapability : ISandboxCapability, IDisposable
+    {
+        private readonly List<string> _disposeOrder;
+        public string Name { get; }
+        public int DisposeCount { get; private set; }
+
+        public OrderedDisposableCapability(string name, List<string> disposeOrder)
+        {
+            Name = name;
+            _disposeOrder = disposeOrder;
+        }
+
+        public void Initialize(ISandboxContext context) { }
+
+        public void Dispose()
+        {
+            DisposeCount++;
+            _disposeOrder.Add(Name);
+        }
     }
 
     private sealed class InvalidShellCommand : IShellCommand

@@ -140,6 +140,8 @@ var options = new SandboxOptions
 var sandbox = new Sandbox(options: options);
 ```
 
+Capability initialization is fail-fast: if any capability throws during `Initialize(...)`, sandbox construction throws an `InvalidOperationException` that includes the capability name/type and preserves the original exception as `InnerException`. Any capabilities that were already initialized in that constructor pass are disposed in reverse registration order to prevent partial-lifecycle leaks.
+
 ## Importing Files
 
 ```csharp
