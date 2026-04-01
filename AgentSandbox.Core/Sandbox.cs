@@ -185,9 +185,28 @@ public class Sandbox : IDisposable, IObservableSandbox
         }
 
         var context = new SandboxContext(Id, _options, _fileSystem, _shell, _eventEmitter, _capabilities);
+        var initializedCapabilities = new List<ISandboxCapability>(_options.Capabilities.Count);
         foreach (var capability in _options.Capabilities)
         {
-            capability.Initialize(context);
+            try
+            {
+                capability.Initialize(context);
+                initializedCapabilities.Add(capability);
+            }
+            catch (Exception ex)
+            {
+                var rollbackDisposeExceptions = TryDisposeCapabilitySet(initializedCapabilities, reverseOrder: true);
+                var wrappedException = new InvalidOperationException(
+                    $"Capability '{capability.Name}' ({capability.GetType().Name}) initialization failed.",
+                    ex);
+
+                if (rollbackDisposeExceptions.Count > 0)
+                {
+                    wrappedException.Data["CapabilityDisposeExceptions"] = rollbackDisposeExceptions;
+                }
+
+                throw wrappedException;
+            }
         }
     }
 
@@ -1061,25 +1080,7 @@ public class Sandbox : IDisposable, IObservableSandbox
                 _sandboxActivity?.Dispose();
             }
 
-            var disposedCapabilities = new HashSet<object>(ReferenceEqualityComparer.Instance);
-            foreach (var capability in _capabilities.Values)
-            {
-                if (!disposedCapabilities.Add(capability))
-                {
-                    continue;
-                }
-
-                if (capability is IDisposable disposable)
-                {
-                    disposable.Dispose();
-                    continue;
-                }
-
-                if (capability is IAsyncDisposable asyncDisposable)
-                {
-                    asyncDisposable.DisposeAsync().AsTask().GetAwaiter().GetResult();
-                }
-            }
+            DisposeCapabilitySet(_options.Capabilities, reverseOrder: true);
 
             _capabilities.Clear();
             lock (_journalSync)
@@ -1101,6 +1102,76 @@ public class Sandbox : IDisposable, IObservableSandbox
             ExitOperationGate();
             _fileOperationLock.Dispose();
             _isolatedCommandLock.Dispose();
+        }
+    }
+
+    private static void DisposeCapabilitySet(IEnumerable<ISandboxCapability> capabilities, bool reverseOrder)
+    {
+        IEnumerable<ISandboxCapability> ordered = capabilities;
+        if (reverseOrder)
+        {
+            ordered = ordered.Reverse();
+        }
+
+        var disposedCapabilities = new HashSet<object>(ReferenceEqualityComparer.Instance);
+        foreach (var capability in ordered)
+        {
+            if (!disposedCapabilities.Add(capability))
+            {
+                continue;
+            }
+
+            DisposeCapabilityInstance(capability);
+        }
+    }
+
+    private static IReadOnlyList<Exception> TryDisposeCapabilitySet(IEnumerable<ISandboxCapability> capabilities, bool reverseOrder)
+    {
+        IEnumerable<ISandboxCapability> ordered = capabilities;
+        if (reverseOrder)
+        {
+            ordered = ordered.Reverse();
+        }
+
+        var disposedCapabilities = new HashSet<object>(ReferenceEqualityComparer.Instance);
+        var exceptions = new List<Exception>();
+        foreach (var capability in ordered)
+        {
+            if (!disposedCapabilities.Add(capability))
+            {
+                continue;
+            }
+
+            try
+            {
+                DisposeCapabilityInstance(capability);
+            }
+            catch (Exception ex)
+            {
+                if (ex is AggregateException aggregateException)
+                {
+                    exceptions.AddRange(aggregateException.Flatten().InnerExceptions);
+                    continue;
+                }
+
+                exceptions.Add(ex);
+            }
+        }
+
+        return exceptions;
+    }
+
+    private static void DisposeCapabilityInstance(object capability)
+    {
+        if (capability is IDisposable disposable)
+        {
+            disposable.Dispose();
+            return;
+        }
+
+        if (capability is IAsyncDisposable asyncDisposable)
+        {
+            asyncDisposable.DisposeAsync().AsTask().GetAwaiter().GetResult();
         }
     }
 

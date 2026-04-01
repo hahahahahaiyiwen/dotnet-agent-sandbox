@@ -71,6 +71,12 @@ internal class SkillManager
             _loadedSkills = Array.Empty<SkillInfo>();
             return _loadedSkills;
         }
+        catch (Exception)
+        {
+            // Clear stale cache when discovery fails to avoid exposing outdated skills.
+            _loadedSkills = Array.Empty<SkillInfo>();
+            throw;
+        }
 
         // Atomically publish a new immutable snapshot for readers.
         var snapshot = skills.AsReadOnly();

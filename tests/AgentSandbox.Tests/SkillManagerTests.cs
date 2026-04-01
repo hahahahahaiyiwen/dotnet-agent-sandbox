@@ -63,6 +63,52 @@ public class SkillManagerTests
     }
 
     [Fact]
+    public void LoadSkills_InvalidMetadata_ClearsLoadedCacheAfterPreviousSuccess()
+    {
+        var fs = new FsImpl();
+        CreateSkill(fs, "/skills/good", "good", "Good skill");
+        var manager = new SkillManager(fs);
+
+        var firstLoad = manager.LoadSkills("/skills");
+        Assert.Single(firstLoad);
+
+        fs.CreateDirectory("/skills/bad");
+        fs.WriteFile("/skills/bad/SKILL.md", "---\nname: bad\n---\n");
+
+        Assert.Throws<InvalidSkillException>(() => manager.LoadSkills("/skills"));
+        Assert.Empty(manager.GetSkills());
+    }
+
+    [Fact]
+    public void LoadSkills_ReturnsSkillsInDeterministicDirectoryOrder()
+    {
+        var fs = new FsImpl();
+        CreateSkill(fs, "/skills/zeta", "zeta", "Zeta skill");
+        CreateSkill(fs, "/skills/alpha", "alpha", "Alpha skill");
+        var manager = new SkillManager(fs);
+
+        var loaded = manager.LoadSkills("/skills");
+
+        Assert.Equal(["alpha", "zeta"], loaded.Select(skill => skill.Name).ToArray());
+    }
+
+    [Fact]
+    public void LoadSkills_BasePathIsFile_ThrowsAndClearsLoadedCache()
+    {
+        var fs = new FsImpl();
+        CreateSkill(fs, "/skills/good", "good", "Good skill");
+        var manager = new SkillManager(fs);
+
+        var firstLoad = manager.LoadSkills("/skills");
+        Assert.Single(firstLoad);
+
+        fs.WriteFile("/not-a-directory", "plain text");
+
+        Assert.Throws<InvalidOperationException>(() => manager.LoadSkills("/not-a-directory"));
+        Assert.Empty(manager.GetSkills());
+    }
+
+    [Fact]
     public void LoadSkills_SkillReadFailure_WrapsInInvalidSkillException()
     {
         var fs = new FsImpl();
