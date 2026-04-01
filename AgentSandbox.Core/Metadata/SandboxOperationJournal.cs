@@ -14,6 +14,12 @@ internal sealed class SandboxOperationJournal
 
     public void Append(SandboxOperationRecord record)
     {
+        var storedRecord = record with
+        {
+            Metadata = record.Metadata is null ? null : new Dictionary<string, object?>(record.Metadata),
+            ShellResult = record.ShellResult is null ? null : CloneShellResult(record.ShellResult)
+        };
+
         if (_options.MaxEntries is int maxEntries && _records.Count >= maxEntries)
         {
             if (_options.TruncationStrategy == SandboxOperationJournalTruncationStrategy.DropNewest)
@@ -28,14 +34,14 @@ internal sealed class SandboxOperationJournal
             }
         }
 
-        _records.Add(record);
+        _records.Add(storedRecord);
     }
 
     public IReadOnlyList<ShellResult> GetCommandHistoryProjection()
     {
         return _records
             .Where(static r => r.Category == "shell" && r.ShellResult is not null)
-            .Select(r => r.ShellResult!)
+            .Select(r => CloneShellResult(r.ShellResult!))
             .ToList();
     }
 
@@ -45,4 +51,16 @@ internal sealed class SandboxOperationJournal
     }
 
     public void Clear() => _records.Clear();
+
+    private static ShellResult CloneShellResult(ShellResult source)
+    {
+        return new ShellResult
+        {
+            Stdout = source.Stdout,
+            Stderr = source.Stderr,
+            ExitCode = source.ExitCode,
+            Command = source.Command,
+            Duration = source.Duration
+        };
+    }
 }

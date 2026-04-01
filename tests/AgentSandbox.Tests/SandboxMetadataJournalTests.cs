@@ -100,6 +100,38 @@ public class SandboxMetadataJournalTests
     }
 
     [Fact]
+    public void GetHistory_RemainsImmutable_WhenReturnedShellResultIsMutated()
+    {
+        using var sandbox = new Sandbox();
+        sandbox.Execute("echo immutable");
+
+        var history = sandbox.GetHistory();
+        Assert.Single(history);
+        history[0].Stdout = "tampered";
+        history[0].Command = "tampered command";
+
+        var refreshedHistory = sandbox.GetHistory();
+        Assert.Single(refreshedHistory);
+        Assert.NotEqual("tampered", refreshedHistory[0].Stdout);
+        Assert.NotEqual("tampered command", refreshedHistory[0].Command);
+    }
+
+    [Fact]
+    public void GetHistory_CapturesShellResultSnapshot_AtAppendTime()
+    {
+        using var sandbox = new Sandbox();
+        var result = sandbox.Execute("echo snapshot");
+        result.Stdout = "mutated outside";
+        result.Command = "mutated command";
+
+        var history = sandbox.GetHistory();
+
+        Assert.Single(history);
+        Assert.NotEqual("mutated outside", history[0].Stdout);
+        Assert.NotEqual("mutated command", history[0].Command);
+    }
+
+    [Fact]
     public void JournalOptions_MaxEntries_Throws_WhenNotPositive()
     {
         var options = new SandboxOperationJournalOptions();
