@@ -229,6 +229,37 @@ public class TelemetryTests
     }
 
     [Fact]
+    public void Sandbox_SnapshotCreatedObserver_CanQuerySandboxState()
+    {
+        var callbackRan = false;
+        Sandbox? sandbox = null;
+        var observer = new DelegateSandboxObserver(onLifecycleEvent: e =>
+        {
+            if (e.LifecycleType != SandboxLifecycleType.SnapshotCreated)
+            {
+                return;
+            }
+
+            _ = sandbox!.GetStats();
+            callbackRan = true;
+        });
+
+        var options = new SandboxOptions
+        {
+            Telemetry = new SandboxTelemetryOptions { Enabled = true }
+        };
+
+        using var createdSandbox = new Sandbox(options: options);
+        sandbox = createdSandbox;
+        sandbox.Subscribe(observer);
+
+        var snapshot = sandbox.CreateSnapshot();
+
+        Assert.NotNull(snapshot);
+        Assert.True(callbackRan);
+    }
+
+    [Fact]
     public void Sandbox_WithTelemetryEnabled_EmitsCommandExecutedEvents()
     {
         var events = new List<CommandExecutedEvent>();

@@ -700,13 +700,14 @@ public class Sandbox : IDisposable, IObservableSandbox
     /// </summary>
     public SandboxSnapshot CreateSnapshot()
     {
+        SandboxSnapshot snapshot;
         EnterFileReadLane();
         try
         {
             var fileSystemData = _fileSystem.CreateSnapshot();
             var createdAt = DateTime.UtcNow;
             var stats = BuildStatsUnsafe();
-            var snapshot = new SandboxSnapshot
+            snapshot = new SandboxSnapshot
             {
                 Id = Id,
                 FileSystemData = fileSystemData,
@@ -723,14 +724,14 @@ public class Sandbox : IDisposable, IObservableSandbox
                     SourceSessionId = Id
                 }
             };
-
-            _telemetry.RecordSnapshotCreated(snapshot.Id);
-            return snapshot;
         }
         finally
         {
             ExitFileReadLane();
         }
+
+        _telemetry.RecordSnapshotCreated(snapshot.Id);
+        return snapshot;
     }
 
     /// <summary>
