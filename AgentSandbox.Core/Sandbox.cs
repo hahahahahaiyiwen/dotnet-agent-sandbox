@@ -195,10 +195,17 @@ public class Sandbox : IDisposable, IObservableSandbox
             }
             catch (Exception ex)
             {
-                DisposeCapabilitySet(initializedCapabilities, reverseOrder: true);
-                throw new InvalidOperationException(
+                var rollbackDisposeExceptions = TryDisposeCapabilitySet(initializedCapabilities, reverseOrder: true);
+                var wrappedException = new InvalidOperationException(
                     $"Capability '{capability.Name}' ({capability.GetType().Name}) initialization failed.",
                     ex);
+
+                if (rollbackDisposeExceptions.Count > 0)
+                {
+                    wrappedException.Data["CapabilityDisposeExceptions"] = rollbackDisposeExceptions;
+                }
+
+                throw wrappedException;
             }
         }
     }
@@ -1116,6 +1123,42 @@ public class Sandbox : IDisposable, IObservableSandbox
 
             DisposeCapabilityInstance(capability);
         }
+    }
+
+    private static IReadOnlyList<Exception> TryDisposeCapabilitySet(IEnumerable<ISandboxCapability> capabilities, bool reverseOrder)
+    {
+        IEnumerable<ISandboxCapability> ordered = capabilities;
+        if (reverseOrder)
+        {
+            ordered = ordered.Reverse();
+        }
+
+        var disposedCapabilities = new HashSet<object>(ReferenceEqualityComparer.Instance);
+        var exceptions = new List<Exception>();
+        foreach (var capability in ordered)
+        {
+            if (!disposedCapabilities.Add(capability))
+            {
+                continue;
+            }
+
+            try
+            {
+                DisposeCapabilityInstance(capability);
+            }
+            catch (Exception ex)
+            {
+                if (ex is AggregateException aggregateException)
+                {
+                    exceptions.AddRange(aggregateException.Flatten().InnerExceptions);
+                    continue;
+                }
+
+                exceptions.Add(ex);
+            }
+        }
+
+        return exceptions;
     }
 
     private static void DisposeCapabilityInstance(object capability)

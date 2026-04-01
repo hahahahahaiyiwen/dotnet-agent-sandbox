@@ -65,17 +65,17 @@ internal class SkillManager
                 }
             }
         }
-        catch (InvalidSkillException)
-        {
-            // Clear stale cache when discovery fails to avoid exposing outdated skills.
-            _loadedSkills = Array.Empty<SkillInfo>();
-            throw;
-        }
         catch (DirectoryNotFoundException)
         {
             // BasePath doesn't exist, return empty list
             _loadedSkills = Array.Empty<SkillInfo>();
             return _loadedSkills;
+        }
+        catch (Exception)
+        {
+            // Clear stale cache when discovery fails to avoid exposing outdated skills.
+            _loadedSkills = Array.Empty<SkillInfo>();
+            throw;
         }
 
         // Atomically publish a new immutable snapshot for readers.

@@ -141,6 +141,29 @@ public class SandboxCapabilityTests
     }
 
     [Fact]
+    public void Sandbox_Ctor_WhenRollbackDisposalFails_PreservesInitializeFailureAndCapturesDisposeErrors()
+    {
+        var options = new SandboxOptions
+        {
+            Capabilities =
+            [
+                new ThrowingDisposableCapability(),
+                new FailingCapability()
+            ]
+        };
+
+        var ex = Assert.Throws<InvalidOperationException>(() => new Sandbox(options: options));
+
+        Assert.Contains("failing", ex.Message, StringComparison.Ordinal);
+        Assert.NotNull(ex.InnerException);
+        Assert.Contains("init failed", ex.InnerException!.Message, StringComparison.Ordinal);
+        Assert.True(ex.Data.Contains("CapabilityDisposeExceptions"));
+        var disposeExceptions = Assert.IsAssignableFrom<IReadOnlyList<Exception>>(ex.Data["CapabilityDisposeExceptions"]);
+        Assert.Single(disposeExceptions);
+        Assert.Contains("dispose failed", disposeExceptions[0].Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Sandbox_Ctor_Throws_WhenDuplicateCapabilityInterfaceRegistered()
     {
         var options = new SandboxOptions
@@ -361,6 +384,13 @@ public class SandboxCapabilityTests
             DisposeCount++;
             _disposeOrder.Add(Name);
         }
+    }
+
+    private sealed class ThrowingDisposableCapability : ISandboxCapability, IDisposable
+    {
+        public string Name => "throwing-disposable";
+        public void Initialize(ISandboxContext context) { }
+        public void Dispose() => throw new InvalidOperationException("dispose failed");
     }
 
     private sealed class InvalidShellCommand : IShellCommand

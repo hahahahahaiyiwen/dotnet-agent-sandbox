@@ -93,6 +93,22 @@ public class SkillManagerTests
     }
 
     [Fact]
+    public void LoadSkills_BasePathIsFile_ThrowsAndClearsLoadedCache()
+    {
+        var fs = new FsImpl();
+        CreateSkill(fs, "/skills/good", "good", "Good skill");
+        var manager = new SkillManager(fs);
+
+        var firstLoad = manager.LoadSkills("/skills");
+        Assert.Single(firstLoad);
+
+        fs.WriteFile("/not-a-directory", "plain text");
+
+        Assert.Throws<InvalidOperationException>(() => manager.LoadSkills("/not-a-directory"));
+        Assert.Empty(manager.GetSkills());
+    }
+
+    [Fact]
     public void LoadSkills_SkillReadFailure_WrapsInInvalidSkillException()
     {
         var fs = new FsImpl();
