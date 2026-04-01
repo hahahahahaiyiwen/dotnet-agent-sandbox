@@ -237,7 +237,7 @@ using var subscription = sandbox.AddApplicationInsights(telemetryClient, opts =>
 });
 ```
 
-Lifecycle observability includes sandbox `Created`, `Executed`, `SnapshotRestored`, and `Disposed` events.
+Lifecycle observability includes sandbox `Created`, `Executed`, `SnapshotCreated`, `SnapshotRestored`, and `Disposed` events.
 For compliance retention, export events to your host telemetry backend and enforce retention/archival in host infrastructure (rather than sandbox memory).
 
 ### Use with Structured Logging (ILogger)

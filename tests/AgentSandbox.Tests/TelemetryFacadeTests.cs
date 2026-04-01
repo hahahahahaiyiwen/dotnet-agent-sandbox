@@ -30,6 +30,7 @@ public class TelemetryFacadeTests
         facade.RecordSandboxCreated();
         facade.RecordSandboxDisposed();
         facade.RecordSandboxExecuted("echo", 0, TimeSpan.FromMilliseconds(1));
+        facade.RecordSnapshotCreated("snap-0");
         facade.RecordSnapshotRestored("snap-1");
         facade.RecordCommandError(new InvalidOperationException("boom"));
         facade.RecordReadFileError("/file.txt", new InvalidOperationException("boom"));
@@ -262,14 +263,16 @@ public class TelemetryFacadeTests
 
         facade.RecordSandboxCreated();
         facade.RecordSandboxExecuted("echo", 0, TimeSpan.FromMilliseconds(2));
+        facade.RecordSnapshotCreated("snap-0");
         facade.RecordSnapshotRestored((string?)null);
         facade.RecordSnapshotRestored("snap-1");
         facade.RecordSandboxDisposed();
 
         var lifecycle = emitter.Events.OfType<SandboxLifecycleEvent>().ToList();
-        Assert.Equal(5, lifecycle.Count);
+        Assert.Equal(6, lifecycle.Count);
         Assert.Contains(lifecycle, e => e.LifecycleType == SandboxLifecycleType.Created);
         Assert.Contains(lifecycle, e => e.LifecycleType == SandboxLifecycleType.Executed && e.Details!.Contains("command=echo", StringComparison.Ordinal));
+        Assert.Contains(lifecycle, e => e.LifecycleType == SandboxLifecycleType.SnapshotCreated && e.Details is not null && e.Details.Contains("snap-0", StringComparison.Ordinal));
         Assert.Contains(lifecycle, e => e.LifecycleType == SandboxLifecycleType.SnapshotRestored && e.Details is null);
         Assert.Contains(lifecycle, e => e.LifecycleType == SandboxLifecycleType.SnapshotRestored && e.Details is not null && e.Details.Contains("snap-1", StringComparison.Ordinal));
         Assert.Contains(lifecycle, e => e.LifecycleType == SandboxLifecycleType.Disposed);

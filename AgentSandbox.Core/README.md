@@ -286,7 +286,7 @@ using var subscription = sandbox.Subscribe(myObserver);
 
 Telemetry hooks live in `AgentSandbox.Core.Telemetry` and are configured via `SandboxOptions.Telemetry`.
 
-Lifecycle telemetry includes sandbox `Created`, `Executed`, `SnapshotRestored`, and `Disposed` events. Integrators can attach host correlation metadata (for example: `tenantId`, `sessionId`, `requestId`) through `SandboxTelemetryOptions.HostCorrelationMetadata`.
+Lifecycle telemetry includes sandbox `Created`, `Executed`, `SnapshotCreated`, `SnapshotRestored`, and `Disposed` events. Integrators can attach host correlation metadata (for example: `tenantId`, `sessionId`, `requestId`) through `SandboxTelemetryOptions.HostCorrelationMetadata`.
 
 For compliance retention, persist emitted lifecycle events in your host logging/telemetry backend with policy driven by your regulatory requirements. Keep retention windows and archival controls in the host system rather than in sandbox memory.
 

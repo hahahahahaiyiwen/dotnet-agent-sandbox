@@ -213,6 +213,11 @@ public class TelemetryTests
         Assert.Equal("tenant-123", executedEvent.HostCorrelationMetadata!["tenantId"]);
         Assert.Equal("req-456", executedEvent.HostCorrelationMetadata["requestId"]);
 
+        var createdSnapshotEvent = Assert.Single(events.Where(e => e.LifecycleType == SandboxLifecycleType.SnapshotCreated));
+        Assert.Contains(snapshot.Id, createdSnapshotEvent.Details);
+        Assert.Equal("tenant-123", createdSnapshotEvent.HostCorrelationMetadata!["tenantId"]);
+        Assert.Equal("req-456", createdSnapshotEvent.HostCorrelationMetadata["requestId"]);
+
         var restoreEvent = Assert.Single(events.Where(e => e.LifecycleType == SandboxLifecycleType.SnapshotRestored));
         Assert.Contains(snapshot.Id, restoreEvent.Details);
         Assert.Equal("tenant-123", restoreEvent.HostCorrelationMetadata!["tenantId"]);
@@ -221,6 +226,99 @@ public class TelemetryTests
         var disposeEvent = Assert.Single(events.Where(e => e.LifecycleType == SandboxLifecycleType.Disposed));
         Assert.Equal("tenant-123", disposeEvent.HostCorrelationMetadata!["tenantId"]);
         Assert.Equal("req-456", disposeEvent.HostCorrelationMetadata["requestId"]);
+    }
+
+    [Fact]
+    public void Sandbox_SnapshotCreatedObserver_CanQuerySandboxState()
+    {
+        var callbackRan = false;
+        Sandbox? sandbox = null;
+        var observer = new DelegateSandboxObserver(onLifecycleEvent: e =>
+        {
+            if (e.LifecycleType != SandboxLifecycleType.SnapshotCreated)
+            {
+                return;
+            }
+
+            _ = sandbox!.GetStats();
+            callbackRan = true;
+        });
+
+        var options = new SandboxOptions
+        {
+            Telemetry = new SandboxTelemetryOptions { Enabled = true }
+        };
+
+        using var createdSandbox = new Sandbox(options: options);
+        sandbox = createdSandbox;
+        sandbox.Subscribe(observer);
+
+        var snapshot = sandbox.CreateSnapshot();
+
+        Assert.NotNull(snapshot);
+        Assert.True(callbackRan);
+    }
+
+    [Fact]
+    public void Sandbox_ExecutedObserver_CanQuerySandboxState()
+    {
+        var callbackRan = false;
+        Sandbox? sandbox = null;
+        var observer = new DelegateSandboxObserver(onLifecycleEvent: e =>
+        {
+            if (e.LifecycleType != SandboxLifecycleType.Executed)
+            {
+                return;
+            }
+
+            _ = sandbox!.GetStats();
+            callbackRan = true;
+        });
+
+        var options = new SandboxOptions
+        {
+            Telemetry = new SandboxTelemetryOptions { Enabled = true }
+        };
+
+        using var createdSandbox = new Sandbox(options: options);
+        sandbox = createdSandbox;
+        sandbox.Subscribe(observer);
+
+        var result = sandbox.Execute("echo hello");
+
+        Assert.Equal(0, result.ExitCode);
+        Assert.True(callbackRan);
+    }
+
+    [Fact]
+    public void Sandbox_SnapshotRestoredObserver_CanQuerySandboxState()
+    {
+        var callbackRan = false;
+        Sandbox? sandbox = null;
+        var observer = new DelegateSandboxObserver(onLifecycleEvent: e =>
+        {
+            if (e.LifecycleType != SandboxLifecycleType.SnapshotRestored)
+            {
+                return;
+            }
+
+            _ = sandbox!.GetStats();
+            callbackRan = true;
+        });
+
+        var options = new SandboxOptions
+        {
+            Telemetry = new SandboxTelemetryOptions { Enabled = true }
+        };
+
+        using var createdSandbox = new Sandbox(options: options);
+        sandbox = createdSandbox;
+        sandbox.Subscribe(observer);
+        var snapshot = sandbox.CreateSnapshot();
+
+        sandbox.RestoreSnapshot(snapshot);
+
+        Assert.True(callbackRan);
     }
 
     [Fact]
