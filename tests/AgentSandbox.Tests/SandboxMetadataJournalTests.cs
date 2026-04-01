@@ -2,7 +2,7 @@ using AgentSandbox.Core;
 using AgentSandbox.Core.Capabilities;
 using AgentSandbox.Core.Metadata;
 using AgentSandbox.Core.Telemetry;
-using System.Reflection;
+using System.Collections;
 
 namespace AgentSandbox.Tests;
 
@@ -183,13 +183,59 @@ public class SandboxMetadataJournalTests
         Assert.Equal("first", storedArray[0]);
     }
 
+    [Fact]
+    public void Journal_Append_ClonesMultiDimensionalArrayMetadata()
+    {
+        var journal = new SandboxOperationJournal();
+        var nestedList = new List<object?> { "x" };
+        var matrix = new object?[1, 2];
+        matrix[0, 0] = nestedList;
+        matrix[0, 1] = "stable";
+
+        journal.Append(new SandboxOperationRecord
+        {
+            Timestamp = DateTime.UtcNow,
+            Category = "capability",
+            Operation = "emit",
+            Metadata = new Dictionary<string, object?> { ["matrix"] = matrix }
+        });
+
+        nestedList.Add("y");
+        matrix[0, 1] = "mutated";
+
+        var storedRecord = GetSingleRecord(journal);
+        var storedMetadata = Assert.IsAssignableFrom<IReadOnlyDictionary<string, object?>>(storedRecord.Metadata);
+        var storedMatrix = Assert.IsType<object?[,]>(storedMetadata["matrix"]);
+        var storedList = Assert.IsAssignableFrom<IReadOnlyList<object?>>(storedMatrix[0, 0]);
+
+        Assert.Equal(new object?[] { "x" }, storedList);
+        Assert.Equal("stable", storedMatrix[0, 1]);
+    }
+
+    [Fact]
+    public void Journal_Append_DoesNotEnumerateArbitrarySequences()
+    {
+        var journal = new SandboxOperationJournal();
+        var sequence = new ThrowingEnumerable();
+        var metadata = new Dictionary<string, object?> { ["sequence"] = sequence };
+
+        journal.Append(new SandboxOperationRecord
+        {
+            Timestamp = DateTime.UtcNow,
+            Category = "capability",
+            Operation = "emit",
+            Metadata = metadata
+        });
+
+        var storedRecord = GetSingleRecord(journal);
+        var storedMetadata = Assert.IsAssignableFrom<IReadOnlyDictionary<string, object?>>(storedRecord.Metadata);
+        Assert.Same(sequence, storedMetadata["sequence"]);
+    }
+
     private static SandboxOperationRecord GetSingleRecord(SandboxOperationJournal journal)
     {
-        var recordsField = typeof(SandboxOperationJournal).GetField("_records", BindingFlags.NonPublic | BindingFlags.Instance);
-        Assert.NotNull(recordsField);
-        var records = recordsField.GetValue(journal);
-        var typedRecords = Assert.IsType<List<SandboxOperationRecord>>(records);
-        return Assert.Single(typedRecords);
+        var records = journal.GetRecordsSnapshot();
+        return Assert.Single(records);
     }
 
     private interface IJournalTestCapability
@@ -215,5 +261,10 @@ public class SandboxMetadataJournalTests
                 operationType: "journal.test",
                 operationName: "emit"));
         }
+    }
+
+    private sealed class ThrowingEnumerable : IEnumerable
+    {
+        public IEnumerator GetEnumerator() => throw new InvalidOperationException("Enumeration is not expected.");
     }
 }

@@ -294,6 +294,7 @@ Current core event emission includes `CommandExecutedEvent`, `SandboxLifecycleEv
 For compliance retention, persist emitted lifecycle events in your host logging/telemetry backend with policy driven by your regulatory requirements. Keep retention windows and archival controls in the host system rather than in sandbox memory.
 
 `GetHistory()` and `GetStats()` are projection views over a centralized metadata journal that tracks shell and capability operations. Journal retention is configurable through `SandboxOptions.Journal`.
+Journal metadata snapshots deep-clone dictionary/list/array containers (including multi-dimensional arrays) while preserving opaque enumerable references to avoid side-effectful enumeration during append.
 
 ## See Also
 

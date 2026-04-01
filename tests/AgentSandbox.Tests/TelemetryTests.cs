@@ -347,7 +347,7 @@ public class TelemetryTests
     }
 
     [Fact]
-    public void Sandbox_CurrentTelemetryScope_DoesNotEmitFileOrSkillEvents()
+    public void Sandbox_WithTelemetryEnabled_DoesNotEmitFileOrSkillEvents()
     {
         var fileEvents = new List<FileChangedEvent>();
         var skillEvents = new List<SkillInvokedEvent>();

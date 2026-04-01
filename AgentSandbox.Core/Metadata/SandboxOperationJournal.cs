@@ -46,6 +46,17 @@ internal sealed class SandboxOperationJournal
             .ToList();
     }
 
+    internal IReadOnlyList<SandboxOperationRecord> GetRecordsSnapshot()
+    {
+        return _records
+            .Select(r => r with
+            {
+                Metadata = CloneMetadata(r.Metadata),
+                ShellResult = r.ShellResult is null ? null : CloneShellResult(r.ShellResult)
+            })
+            .ToList();
+    }
+
     public int CountByCategory(string category)
     {
         return _records.Count(r => string.Equals(r.Category, category, StringComparison.Ordinal));
@@ -128,14 +139,7 @@ internal sealed class SandboxOperationJournal
 
         if (value is Array array)
         {
-            var elementType = valueType.GetElementType() ?? typeof(object);
-            var clonedArray = Array.CreateInstance(elementType, array.Length);
-            for (var i = 0; i < array.Length; i++)
-            {
-                clonedArray.SetValue(CloneMetadataValue(array.GetValue(i)), i);
-            }
-
-            return clonedArray;
+            return CloneArray(array, valueType);
         }
 
         if (value is IList list)
@@ -149,22 +153,59 @@ internal sealed class SandboxOperationJournal
             return clonedList;
         }
 
-        if (value is IEnumerable enumerable)
-        {
-            var clonedSequence = new List<object?>();
-            foreach (var item in enumerable)
-            {
-                clonedSequence.Add(CloneMetadataValue(item));
-            }
-
-            return clonedSequence;
-        }
-
         if (value is ICloneable cloneable)
         {
             return cloneable.Clone();
         }
 
         return value;
+    }
+
+    private static Array CloneArray(Array source, Type sourceType)
+    {
+        var elementType = sourceType.GetElementType() ?? typeof(object);
+        var rank = source.Rank;
+        var lengths = new int[rank];
+        var lowerBounds = new int[rank];
+        for (var i = 0; i < rank; i++)
+        {
+            lengths[i] = source.GetLength(i);
+            lowerBounds[i] = source.GetLowerBound(i);
+        }
+
+        var clone = Array.CreateInstance(elementType, lengths, lowerBounds);
+        if (source.Length == 0)
+        {
+            return clone;
+        }
+
+        var indices = (int[])lowerBounds.Clone();
+        while (true)
+        {
+            clone.SetValue(CloneMetadataValue(source.GetValue(indices)), indices);
+            if (!TryIncrementArrayIndices(indices, lowerBounds, lengths))
+            {
+                break;
+            }
+        }
+
+        return clone;
+    }
+
+    private static bool TryIncrementArrayIndices(int[] indices, int[] lowerBounds, int[] lengths)
+    {
+        for (var dimension = indices.Length - 1; dimension >= 0; dimension--)
+        {
+            indices[dimension]++;
+            var upperBoundExclusive = lowerBounds[dimension] + lengths[dimension];
+            if (indices[dimension] < upperBoundExclusive)
+            {
+                return true;
+            }
+
+            indices[dimension] = lowerBounds[dimension];
+        }
+
+        return false;
     }
 }
