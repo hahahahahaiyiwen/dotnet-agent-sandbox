@@ -260,6 +260,68 @@ public class TelemetryTests
     }
 
     [Fact]
+    public void Sandbox_ExecutedObserver_CanQuerySandboxState()
+    {
+        var callbackRan = false;
+        Sandbox? sandbox = null;
+        var observer = new DelegateSandboxObserver(onLifecycleEvent: e =>
+        {
+            if (e.LifecycleType != SandboxLifecycleType.Executed)
+            {
+                return;
+            }
+
+            _ = sandbox!.GetStats();
+            callbackRan = true;
+        });
+
+        var options = new SandboxOptions
+        {
+            Telemetry = new SandboxTelemetryOptions { Enabled = true }
+        };
+
+        using var createdSandbox = new Sandbox(options: options);
+        sandbox = createdSandbox;
+        sandbox.Subscribe(observer);
+
+        var result = sandbox.Execute("echo hello");
+
+        Assert.Equal(0, result.ExitCode);
+        Assert.True(callbackRan);
+    }
+
+    [Fact]
+    public void Sandbox_SnapshotRestoredObserver_CanQuerySandboxState()
+    {
+        var callbackRan = false;
+        Sandbox? sandbox = null;
+        var observer = new DelegateSandboxObserver(onLifecycleEvent: e =>
+        {
+            if (e.LifecycleType != SandboxLifecycleType.SnapshotRestored)
+            {
+                return;
+            }
+
+            _ = sandbox!.GetStats();
+            callbackRan = true;
+        });
+
+        var options = new SandboxOptions
+        {
+            Telemetry = new SandboxTelemetryOptions { Enabled = true }
+        };
+
+        using var createdSandbox = new Sandbox(options: options);
+        sandbox = createdSandbox;
+        sandbox.Subscribe(observer);
+        var snapshot = sandbox.CreateSnapshot();
+
+        sandbox.RestoreSnapshot(snapshot);
+
+        Assert.True(callbackRan);
+    }
+
+    [Fact]
     public void Sandbox_WithTelemetryEnabled_EmitsCommandExecutedEvents()
     {
         var events = new List<CommandExecutedEvent>();

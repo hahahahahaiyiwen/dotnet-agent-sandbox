@@ -7,6 +7,7 @@ using AgentSandbox.Core.Telemetry;
 using AgentSandbox.Core.Validation;
 using AgentSandbox.Core.Metadata;
 using System.Diagnostics;
+using System.Runtime.ExceptionServices;
 using System.Text;
 using System.Threading;
 
@@ -233,6 +234,11 @@ public class Sandbox : IDisposable, IObservableSandbox
         var stopwatch = Stopwatch.StartNew();
         Activity? activity = null;
         var releaseOperationGate = true;
+        ShellResult? result = null;
+        int executedExitCode = -1;
+        TimeSpan executedDuration = TimeSpan.Zero;
+        ExceptionDispatchInfo? capturedException = null;
+        var commandName = SandboxTelemetryHelper.GetCommandName(command);
 
         try
         {
@@ -251,28 +257,31 @@ public class Sandbox : IDisposable, IObservableSandbox
                 timeoutResult.Duration = stopwatch.Elapsed;
                 AppendShellOperation(timeoutResult);
                 _telemetry.RecordCommandError(new TimeoutException(timeoutResult.Stderr));
-                _telemetry.RecordSandboxExecuted(SandboxTelemetryHelper.GetCommandName(command), timeoutResult.ExitCode, timeoutResult.Duration);
                 TrackTimedOutCommand(executionTask);
                 releaseOperationGate = false;
-                return timeoutResult;
+                result = timeoutResult;
+                executedExitCode = timeoutResult.ExitCode;
+                executedDuration = timeoutResult.Duration;
             }
+            else
+            {
+                result = executionTask.GetAwaiter().GetResult();
+                result = _shell.RedactSecrets(result);
+                AppendShellOperation(result);
+                stopwatch.Stop();
 
-            var result = executionTask.GetAwaiter().GetResult();
-            result = _shell.RedactSecrets(result);
-            AppendShellOperation(result);
-            stopwatch.Stop();
-
-            _telemetry.RecordCommandSuccess(command, result, stopwatch.Elapsed);
-            _telemetry.RecordSandboxExecuted(SandboxTelemetryHelper.GetCommandName(command), result.ExitCode, stopwatch.Elapsed);
-
-            return result;
+                _telemetry.RecordCommandSuccess(command, result, stopwatch.Elapsed);
+                executedExitCode = result.ExitCode;
+                executedDuration = stopwatch.Elapsed;
+            }
         }
         catch (Exception ex)
         {
             stopwatch.Stop();
             _telemetry.RecordCommandError(ex);
-            _telemetry.RecordSandboxExecuted(SandboxTelemetryHelper.GetCommandName(command), -1, stopwatch.Elapsed);
-            throw;
+            executedExitCode = -1;
+            executedDuration = stopwatch.Elapsed;
+            capturedException = ExceptionDispatchInfo.Capture(ex);
         }
         finally
         {
@@ -283,6 +292,10 @@ public class Sandbox : IDisposable, IObservableSandbox
             }
             activity?.Dispose();
         }
+
+        _telemetry.RecordSandboxExecuted(commandName, executedExitCode, executedDuration);
+        capturedException?.Throw();
+        return result!;
     }
 
     private ShellResult ExecuteIsolatedParallel(string command)
@@ -753,7 +766,6 @@ public class Sandbox : IDisposable, IObservableSandbox
             }
             
             LastActivityAt = DateTime.UtcNow;
-            _telemetry.RecordSnapshotRestored(snapshot.Id);
         }
         finally
         {
@@ -761,6 +773,8 @@ public class Sandbox : IDisposable, IObservableSandbox
             _isolatedCommandLock.ExitWriteLock();
             ExitOperationGate();
         }
+
+        _telemetry.RecordSnapshotRestored(snapshot.Id);
     }
 
     #endregion
