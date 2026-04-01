@@ -2,6 +2,7 @@ using AgentSandbox.Core;
 using AgentSandbox.Core.Capabilities;
 using AgentSandbox.Core.Metadata;
 using AgentSandbox.Core.Telemetry;
+using System.Reflection;
 
 namespace AgentSandbox.Tests;
 
@@ -137,6 +138,58 @@ public class SandboxMetadataJournalTests
         var options = new SandboxOperationJournalOptions();
         Assert.Throws<ArgumentOutOfRangeException>(() => options.MaxEntries = 0);
         Assert.Throws<ArgumentOutOfRangeException>(() => options.MaxEntries = -1);
+    }
+
+    [Fact]
+    public void Journal_Append_ClonesNestedMetadataCollections()
+    {
+        var journal = new SandboxOperationJournal();
+        var nestedList = new List<object?> { "alpha" };
+        var nestedDictionary = new Dictionary<string, object?>
+        {
+            ["items"] = nestedList
+        };
+        var nestedArray = new object?[] { "first" };
+        var metadata = new Dictionary<string, object?>
+        {
+            ["dict"] = nestedDictionary,
+            ["array"] = nestedArray
+        };
+
+        journal.Append(new SandboxOperationRecord
+        {
+            Timestamp = DateTime.UtcNow,
+            Category = "capability",
+            Operation = "emit",
+            Metadata = metadata
+        });
+
+        nestedList.Add("beta");
+        nestedDictionary["new-key"] = "new-value";
+        nestedArray[0] = "mutated";
+        metadata["added"] = "outside";
+
+        var storedRecord = GetSingleRecord(journal);
+        var storedMetadata = Assert.IsAssignableFrom<IReadOnlyDictionary<string, object?>>(storedRecord.Metadata);
+        Assert.False(storedMetadata.ContainsKey("added"));
+
+        var storedDict = Assert.IsAssignableFrom<IReadOnlyDictionary<string, object?>>(storedMetadata["dict"]);
+        Assert.False(storedDict.ContainsKey("new-key"));
+
+        var storedList = Assert.IsAssignableFrom<IReadOnlyList<object?>>(storedDict["items"]);
+        Assert.Equal(new object?[] { "alpha" }, storedList);
+
+        var storedArray = Assert.IsType<object?[]>(storedMetadata["array"]);
+        Assert.Equal("first", storedArray[0]);
+    }
+
+    private static SandboxOperationRecord GetSingleRecord(SandboxOperationJournal journal)
+    {
+        var recordsField = typeof(SandboxOperationJournal).GetField("_records", BindingFlags.NonPublic | BindingFlags.Instance);
+        Assert.NotNull(recordsField);
+        var records = recordsField.GetValue(journal);
+        var typedRecords = Assert.IsType<List<SandboxOperationRecord>>(records);
+        return Assert.Single(typedRecords);
     }
 
     private interface IJournalTestCapability
