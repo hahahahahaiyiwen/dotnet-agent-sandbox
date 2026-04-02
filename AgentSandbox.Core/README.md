@@ -280,19 +280,21 @@ var releasedSnapshotId = manager.Release(restoredSandbox.Id);
 var history = sandbox.GetHistory();
 
 // Build an AI tool description for the sandbox
-var toolDescription = sandbox.GetToolDescription();
+var toolDescription = sandbox.GetBashToolDescription();
 
-// Subscribe to sandbox events (commands, files, lifecycle)
+// Subscribe to sandbox events
 using var subscription = sandbox.Subscribe(myObserver);
 ```
 
 Telemetry hooks live in `AgentSandbox.Core.Telemetry` and are configured via `SandboxOptions.Telemetry`.
 
 Lifecycle telemetry includes sandbox `Created`, `Executed`, `SnapshotCreated`, `SnapshotRestored`, and `Disposed` events. Integrators can attach host correlation metadata (for example: `tenantId`, `sessionId`, `requestId`) through `SandboxTelemetryOptions.HostCorrelationMetadata`.
+Current core event emission includes `CommandExecutedEvent`, `SandboxLifecycleEvent`, `SandboxErrorEvent`, and capability operation events; `FileChangedEvent` and `SkillInvokedEvent` payloads are reserved for future expansion.
 
 For compliance retention, persist emitted lifecycle events in your host logging/telemetry backend with policy driven by your regulatory requirements. Keep retention windows and archival controls in the host system rather than in sandbox memory.
 
 `GetHistory()` and `GetStats()` are projection views over a centralized metadata journal that tracks shell and capability operations. Journal retention is configurable through `SandboxOptions.Journal`.
+Journal metadata snapshots deep-clone dictionary/list/array containers (including multi-dimensional arrays) while preserving opaque enumerable references to avoid side-effectful enumeration during append.
 
 ## See Also
 

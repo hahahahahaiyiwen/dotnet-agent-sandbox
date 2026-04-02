@@ -2,6 +2,7 @@ using AgentSandbox.Core;
 using AgentSandbox.Core.Capabilities;
 using AgentSandbox.Core.Metadata;
 using AgentSandbox.Core.Telemetry;
+using System.Collections;
 
 namespace AgentSandbox.Tests;
 
@@ -100,11 +101,141 @@ public class SandboxMetadataJournalTests
     }
 
     [Fact]
+    public void GetHistory_RemainsImmutable_WhenReturnedShellResultIsMutated()
+    {
+        using var sandbox = new Sandbox();
+        sandbox.Execute("echo immutable");
+
+        var history = sandbox.GetHistory();
+        Assert.Single(history);
+        history[0].Stdout = "tampered";
+        history[0].Command = "tampered command";
+
+        var refreshedHistory = sandbox.GetHistory();
+        Assert.Single(refreshedHistory);
+        Assert.NotEqual("tampered", refreshedHistory[0].Stdout);
+        Assert.NotEqual("tampered command", refreshedHistory[0].Command);
+    }
+
+    [Fact]
+    public void GetHistory_CapturesShellResultSnapshot_AtAppendTime()
+    {
+        using var sandbox = new Sandbox();
+        var result = sandbox.Execute("echo snapshot");
+        result.Stdout = "mutated outside";
+        result.Command = "mutated command";
+
+        var history = sandbox.GetHistory();
+
+        Assert.Single(history);
+        Assert.NotEqual("mutated outside", history[0].Stdout);
+        Assert.NotEqual("mutated command", history[0].Command);
+    }
+
+    [Fact]
     public void JournalOptions_MaxEntries_Throws_WhenNotPositive()
     {
         var options = new SandboxOperationJournalOptions();
         Assert.Throws<ArgumentOutOfRangeException>(() => options.MaxEntries = 0);
         Assert.Throws<ArgumentOutOfRangeException>(() => options.MaxEntries = -1);
+    }
+
+    [Fact]
+    public void Journal_Append_ClonesNestedMetadataCollections()
+    {
+        var journal = new SandboxOperationJournal();
+        var nestedList = new List<object?> { "alpha" };
+        var nestedDictionary = new Dictionary<string, object?>
+        {
+            ["items"] = nestedList
+        };
+        var nestedArray = new object?[] { "first" };
+        var metadata = new Dictionary<string, object?>
+        {
+            ["dict"] = nestedDictionary,
+            ["array"] = nestedArray
+        };
+
+        journal.Append(new SandboxOperationRecord
+        {
+            Timestamp = DateTime.UtcNow,
+            Category = "capability",
+            Operation = "emit",
+            Metadata = metadata
+        });
+
+        nestedList.Add("beta");
+        nestedDictionary["new-key"] = "new-value";
+        nestedArray[0] = "mutated";
+        metadata["added"] = "outside";
+
+        var storedRecord = GetSingleRecord(journal);
+        var storedMetadata = Assert.IsAssignableFrom<IReadOnlyDictionary<string, object?>>(storedRecord.Metadata);
+        Assert.False(storedMetadata.ContainsKey("added"));
+
+        var storedDict = Assert.IsAssignableFrom<IReadOnlyDictionary<string, object?>>(storedMetadata["dict"]);
+        Assert.False(storedDict.ContainsKey("new-key"));
+
+        var storedList = Assert.IsAssignableFrom<IReadOnlyList<object?>>(storedDict["items"]);
+        Assert.Equal(new object?[] { "alpha" }, storedList);
+
+        var storedArray = Assert.IsType<object?[]>(storedMetadata["array"]);
+        Assert.Equal("first", storedArray[0]);
+    }
+
+    [Fact]
+    public void Journal_Append_ClonesMultiDimensionalArrayMetadata()
+    {
+        var journal = new SandboxOperationJournal();
+        var nestedList = new List<object?> { "x" };
+        var matrix = new object?[1, 2];
+        matrix[0, 0] = nestedList;
+        matrix[0, 1] = "stable";
+
+        journal.Append(new SandboxOperationRecord
+        {
+            Timestamp = DateTime.UtcNow,
+            Category = "capability",
+            Operation = "emit",
+            Metadata = new Dictionary<string, object?> { ["matrix"] = matrix }
+        });
+
+        nestedList.Add("y");
+        matrix[0, 1] = "mutated";
+
+        var storedRecord = GetSingleRecord(journal);
+        var storedMetadata = Assert.IsAssignableFrom<IReadOnlyDictionary<string, object?>>(storedRecord.Metadata);
+        var storedMatrix = Assert.IsType<object?[,]>(storedMetadata["matrix"]);
+        var storedList = Assert.IsAssignableFrom<IReadOnlyList<object?>>(storedMatrix[0, 0]);
+
+        Assert.Equal(new object?[] { "x" }, storedList);
+        Assert.Equal("stable", storedMatrix[0, 1]);
+    }
+
+    [Fact]
+    public void Journal_Append_DoesNotEnumerateArbitrarySequences()
+    {
+        var journal = new SandboxOperationJournal();
+        var sequence = new ThrowingEnumerable();
+        var metadata = new Dictionary<string, object?> { ["sequence"] = sequence };
+
+        journal.Append(new SandboxOperationRecord
+        {
+            Timestamp = DateTime.UtcNow,
+            Category = "capability",
+            Operation = "emit",
+            Metadata = metadata
+        });
+
+        var storedRecord = GetSingleRecord(journal);
+        var storedMetadata = Assert.IsAssignableFrom<IReadOnlyDictionary<string, object?>>(storedRecord.Metadata);
+        Assert.Same(sequence, storedMetadata["sequence"]);
+    }
+
+    private static SandboxOperationRecord GetSingleRecord(SandboxOperationJournal journal)
+    {
+        var records = journal.GetRecordsSnapshot();
+        return Assert.Single(records);
     }
 
     private interface IJournalTestCapability
@@ -130,5 +261,10 @@ public class SandboxMetadataJournalTests
                 operationType: "journal.test",
                 operationName: "emit"));
         }
+    }
+
+    private sealed class ThrowingEnumerable : IEnumerable
+    {
+        public IEnumerator GetEnumerator() => throw new InvalidOperationException("Enumeration is not expected.");
     }
 }

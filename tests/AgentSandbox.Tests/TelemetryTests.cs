@@ -1,5 +1,7 @@
 using AgentSandbox.Core;
+using AgentSandbox.Core.Importing;
 using AgentSandbox.Core.Security;
+using AgentSandbox.Core.Skills;
 using AgentSandbox.Core.Shell.Extensions;
 using AgentSandbox.Core.Telemetry;
 using AgentSandbox.Core.Validation;
@@ -342,6 +344,48 @@ public class TelemetryTests
         Assert.Equal(2, events.Count);
         Assert.Equal("echo", events[0].CommandName);
         Assert.Equal("pwd", events[1].CommandName);
+    }
+
+    [Fact]
+    public void Sandbox_WithTelemetryEnabled_DoesNotEmitFileOrSkillEvents()
+    {
+        var fileEvents = new List<FileChangedEvent>();
+        var skillEvents = new List<SkillInvokedEvent>();
+        var lifecycleEvents = new List<SandboxLifecycleEvent>();
+        var commandEvents = new List<CommandExecutedEvent>();
+        var observer = new DelegateSandboxObserver(
+            onFileChanged: e => fileEvents.Add(e),
+            onSkillInvoked: e => skillEvents.Add(e),
+            onLifecycleEvent: e => lifecycleEvents.Add(e),
+            onCommandExecuted: e => commandEvents.Add(e));
+
+        var options = new SandboxOptions
+        {
+            Telemetry = new SandboxTelemetryOptions { Enabled = true },
+            Imports =
+            [
+                new FileImportOptions
+                {
+                    Path = "/skills/demo",
+                    Source = new InMemorySource()
+                        .AddFile("SKILL.md", "---\nname: demo\ndescription: demo skill\n---\n")
+                        .AddFile("scripts/run.sh", "echo from-skill")
+                }
+            ],
+            AgentSkills = new AgentSkillOptions { BasePath = "/skills" }
+        };
+
+        using var sandbox = new Sandbox(options: options);
+        sandbox.Subscribe(observer);
+
+        sandbox.WriteFile("/tmp.txt", "hello");
+        var result = sandbox.Execute("sh /skills/demo/scripts/run.sh");
+
+        Assert.True(result.Success);
+        Assert.Empty(fileEvents);
+        Assert.Empty(skillEvents);
+        Assert.Single(commandEvents);
+        Assert.Contains(lifecycleEvents, e => e.LifecycleType == SandboxLifecycleType.Executed);
     }
 
     [Fact]
