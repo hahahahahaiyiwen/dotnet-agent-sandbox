@@ -30,6 +30,55 @@ public class SqlCapabilityTests
         }
     }
 
+    [Theory]
+    [InlineData("-- leading comment\nSELECT id, name FROM users ORDER BY id", 2)]
+    [InlineData("/* leading block comment */ SELECT id, name FROM users ORDER BY id", 2)]
+    [InlineData("-- leading comment\nWITH cte AS (SELECT id, name FROM users) SELECT name FROM cte ORDER BY id", 2)]
+    [InlineData("/* leading block comment */ PRAGMA table_info(users)", 2)]
+    [InlineData("-- leading comment\nEXPLAIN SELECT id FROM users", 1)]
+    public void ExecuteSql_AllowsReadOnlyStatements_WithLeadingComments(string statement, int minExpectedRows)
+    {
+        var dbPath = CreateDatabaseWithSampleRows();
+        try
+        {
+            using var sandbox = CreateSandbox(dbPath, out _);
+            var capability = sandbox.GetCapability<ISqlCapability>();
+
+            var result = capability.ExecuteSql(statement);
+
+            Assert.True(result.Rows.Count >= minExpectedRows);
+        }
+        finally
+        {
+            File.Delete(dbPath);
+        }
+    }
+
+    [Theory]
+    [InlineData("-- leading comment\nINSERT INTO users(name) VALUES ('Mallory')")]
+    [InlineData("/* leading block comment */ DELETE FROM users WHERE id = 1")]
+    [InlineData("-- c1\n-- c2\nUPDATE users SET name = 'Mallory' WHERE id = 1")]
+    [InlineData("/* leading block comment */ DROP TABLE users")]
+    [InlineData("-- comment only")]
+    [InlineData("/* unterminated leading block comment")]
+    public void ExecuteSql_BlocksNonReadOnlyStatements_WithLeadingComments(string statement)
+    {
+        var dbPath = CreateDatabaseWithSampleRows();
+        try
+        {
+            using var sandbox = CreateSandbox(dbPath, out _);
+            var capability = sandbox.GetCapability<ISqlCapability>();
+
+            var ex = Assert.Throws<SqlCapabilityException>(() => capability.ExecuteSql(statement));
+
+            Assert.Equal(SqlCapabilityErrorCodes.AuthDenied, ex.ErrorCode);
+        }
+        finally
+        {
+            File.Delete(dbPath);
+        }
+    }
+
     [Fact]
     public void ExecuteSql_BlocksDml_WithAuthDenied()
     {

@@ -1,7 +1,6 @@
 using System.Diagnostics;
 using System.Security.Cryptography;
 using System.Text;
-using System.Text.RegularExpressions;
 using AgentSandbox.Core.Capabilities;
 using AgentSandbox.Core.Telemetry;
 using Microsoft.Data.Sqlite;
@@ -10,7 +9,6 @@ namespace AgentSandbox.Capabilities.SQL;
 
 public sealed class SqlSandboxCapability : ISandboxCapability, ISqlCapability, IDisposable
 {
-    private static readonly Regex FirstTokenRegex = new(@"^\s*(?<token>[A-Za-z_]+)", RegexOptions.Compiled);
     private static readonly HashSet<string> ReadOnlyPragmasWithArguments =
     [
         "table_info",
@@ -211,7 +209,13 @@ public sealed class SqlSandboxCapability : ISandboxCapability, ISqlCapability, I
             throw new SqlCapabilityException(SqlCapabilityErrorCodes.AuthDenied, "Multiple SQL statements are not allowed.");
         }
 
-        var token = FirstTokenRegex.Match(normalized).Groups["token"].Value.ToUpperInvariant();
+        var tokenStartIndex = 0;
+        SkipTrivia(normalized, ref tokenStartIndex);
+        var executableStatement = tokenStartIndex < normalized.Length ? normalized[tokenStartIndex..] : string.Empty;
+
+        var tokenCursor = tokenStartIndex;
+        TryReadWord(normalized, ref tokenCursor, out var tokenText);
+        var token = tokenText.ToUpperInvariant();
         if (token is not ("SELECT" or "PRAGMA" or "EXPLAIN" or "WITH"))
         {
             throw new SqlCapabilityException(SqlCapabilityErrorCodes.AuthDenied, $"Statement '{token}' is not allowed in read-only mode.");
@@ -219,12 +223,12 @@ public sealed class SqlSandboxCapability : ISandboxCapability, ISqlCapability, I
 
         if (token == "PRAGMA")
         {
-            EnsurePragmaIsReadOnly(normalized);
+            EnsurePragmaIsReadOnly(executableStatement);
         }
 
         if (token == "WITH")
         {
-            EnsureWithIsReadOnly(normalized);
+            EnsureWithIsReadOnly(executableStatement);
         }
 
     }
