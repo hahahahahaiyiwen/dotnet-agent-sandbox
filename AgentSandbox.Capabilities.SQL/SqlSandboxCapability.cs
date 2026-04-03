@@ -222,6 +222,11 @@ public sealed class SqlSandboxCapability : ISandboxCapability, ISqlCapability, I
             EnsurePragmaIsReadOnly(normalized);
         }
 
+        if (token == "WITH")
+        {
+            EnsureWithIsReadOnly(normalized);
+        }
+
     }
 
     private SqlCapabilityException CreateFailure(
@@ -401,6 +406,377 @@ public sealed class SqlSandboxCapability : ISandboxCapability, ISqlCapability, I
         if (!ReadOnlyPragmasWithArguments.Contains(baseName.ToLowerInvariant()))
         {
             throw new SqlCapabilityException(SqlCapabilityErrorCodes.AuthDenied, "Mutable PRAGMA statements are not allowed.");
+        }
+    }
+
+    private static void EnsureWithIsReadOnly(string statement)
+    {
+        var index = "WITH".Length;
+        SkipTrivia(statement, ref index);
+        TryConsumeKeyword(statement, ref index, "RECURSIVE");
+
+        if (!TryConsumeWithCteList(statement, ref index))
+        {
+            throw new SqlCapabilityException(SqlCapabilityErrorCodes.AuthDenied, "Only read-only WITH SELECT statements are allowed.");
+        }
+
+        SkipTrivia(statement, ref index);
+        if (!TryReadWord(statement, ref index, out var mainToken) || !mainToken.Equals("SELECT", StringComparison.OrdinalIgnoreCase))
+        {
+            throw new SqlCapabilityException(SqlCapabilityErrorCodes.AuthDenied, "Only read-only WITH SELECT statements are allowed.");
+        }
+    }
+
+    private static bool TryConsumeWithCteList(string statement, ref int index)
+    {
+        var consumedAnyCte = false;
+        while (true)
+        {
+            SkipTrivia(statement, ref index);
+            if (!TryConsumeIdentifier(statement, ref index))
+            {
+                return false;
+            }
+
+            SkipTrivia(statement, ref index);
+            if (index < statement.Length && statement[index] == '(')
+            {
+                if (!TryConsumeParenthesized(statement, ref index))
+                {
+                    return false;
+                }
+            }
+
+            SkipTrivia(statement, ref index);
+            if (!TryConsumeKeyword(statement, ref index, "AS"))
+            {
+                return false;
+            }
+
+            SkipTrivia(statement, ref index);
+            if (index >= statement.Length || statement[index] != '(' || !TryConsumeParenthesized(statement, ref index))
+            {
+                return false;
+            }
+
+            consumedAnyCte = true;
+            SkipTrivia(statement, ref index);
+            if (index < statement.Length && statement[index] == ',')
+            {
+                index++;
+                continue;
+            }
+
+            return consumedAnyCte;
+        }
+    }
+
+    private static bool TryConsumeIdentifier(string statement, ref int index)
+    {
+        if (index >= statement.Length)
+        {
+            return false;
+        }
+
+        if (TryConsumeQuotedIdentifier(statement, ref index))
+        {
+            return true;
+        }
+
+        var start = index;
+        while (index < statement.Length && (char.IsLetterOrDigit(statement[index]) || statement[index] == '_'))
+        {
+            index++;
+        }
+
+        return index > start;
+    }
+
+    private static bool TryConsumeQuotedIdentifier(string statement, ref int index)
+    {
+        if (index >= statement.Length)
+        {
+            return false;
+        }
+
+        var quote = statement[index];
+        char closeQuote;
+        if (quote == '"')
+        {
+            closeQuote = '"';
+        }
+        else if (quote == '`')
+        {
+            closeQuote = '`';
+        }
+        else if (quote == '[')
+        {
+            closeQuote = ']';
+        }
+        else
+        {
+            return false;
+        }
+
+        index++;
+        while (index < statement.Length)
+        {
+            var c = statement[index];
+            if (c == closeQuote)
+            {
+                if (closeQuote is '"' or '`' && index + 1 < statement.Length && statement[index + 1] == closeQuote)
+                {
+                    index += 2;
+                    continue;
+                }
+
+                index++;
+                return true;
+            }
+
+            index++;
+        }
+
+        return false;
+    }
+
+    private static bool TryConsumeParenthesized(string statement, ref int index)
+    {
+        if (index >= statement.Length || statement[index] != '(')
+        {
+            return false;
+        }
+
+        var depth = 0;
+        var inSingleQuote = false;
+        var inDoubleQuote = false;
+        var inBacktickQuote = false;
+        var inBracketQuote = false;
+        var inLineComment = false;
+        var inBlockComment = false;
+
+        for (; index < statement.Length; index++)
+        {
+            var c = statement[index];
+            var next = index + 1 < statement.Length ? statement[index + 1] : '\0';
+
+            if (inLineComment)
+            {
+                if (c == '\n')
+                {
+                    inLineComment = false;
+                }
+                continue;
+            }
+
+            if (inBlockComment)
+            {
+                if (c == '*' && next == '/')
+                {
+                    inBlockComment = false;
+                    index++;
+                }
+                continue;
+            }
+
+            if (inSingleQuote)
+            {
+                if (c == '\'')
+                {
+                    if (next == '\'')
+                    {
+                        index++;
+                    }
+                    else
+                    {
+                        inSingleQuote = false;
+                    }
+                }
+                continue;
+            }
+
+            if (inDoubleQuote)
+            {
+                if (c == '"')
+                {
+                    if (next == '"')
+                    {
+                        index++;
+                    }
+                    else
+                    {
+                        inDoubleQuote = false;
+                    }
+                }
+                continue;
+            }
+
+            if (inBacktickQuote)
+            {
+                if (c == '`')
+                {
+                    if (next == '`')
+                    {
+                        index++;
+                    }
+                    else
+                    {
+                        inBacktickQuote = false;
+                    }
+                }
+                continue;
+            }
+
+            if (inBracketQuote)
+            {
+                if (c == ']')
+                {
+                    inBracketQuote = false;
+                }
+                continue;
+            }
+
+            if (c == '-' && next == '-')
+            {
+                inLineComment = true;
+                index++;
+                continue;
+            }
+
+            if (c == '/' && next == '*')
+            {
+                inBlockComment = true;
+                index++;
+                continue;
+            }
+
+            if (c == '\'')
+            {
+                inSingleQuote = true;
+                continue;
+            }
+
+            if (c == '"')
+            {
+                inDoubleQuote = true;
+                continue;
+            }
+
+            if (c == '`')
+            {
+                inBacktickQuote = true;
+                continue;
+            }
+
+            if (c == '[')
+            {
+                inBracketQuote = true;
+                continue;
+            }
+
+            if (c == '(')
+            {
+                depth++;
+                continue;
+            }
+
+            if (c == ')')
+            {
+                depth--;
+                if (depth == 0)
+                {
+                    index++;
+                    return true;
+                }
+
+                if (depth < 0)
+                {
+                    return false;
+                }
+            }
+        }
+
+        return false;
+    }
+
+    private static bool TryReadWord(string statement, ref int index, out string word)
+    {
+        SkipTrivia(statement, ref index);
+        var start = index;
+        while (index < statement.Length && (char.IsLetterOrDigit(statement[index]) || statement[index] == '_'))
+        {
+            index++;
+        }
+
+        if (index == start)
+        {
+            word = string.Empty;
+            return false;
+        }
+
+        word = statement[start..index];
+        return true;
+    }
+
+    private static bool TryConsumeKeyword(string statement, ref int index, string keyword)
+    {
+        var snapshot = index;
+        if (!TryReadWord(statement, ref index, out var word))
+        {
+            index = snapshot;
+            return false;
+        }
+
+        if (!word.Equals(keyword, StringComparison.OrdinalIgnoreCase))
+        {
+            index = snapshot;
+            return false;
+        }
+
+        return true;
+    }
+
+    private static void SkipTrivia(string statement, ref int index)
+    {
+        while (index < statement.Length)
+        {
+            if (char.IsWhiteSpace(statement[index]))
+            {
+                index++;
+                continue;
+            }
+
+            if (index + 1 < statement.Length && statement[index] == '-' && statement[index + 1] == '-')
+            {
+                index += 2;
+                while (index < statement.Length && statement[index] != '\n')
+                {
+                    index++;
+                }
+                continue;
+            }
+
+            if (index + 1 < statement.Length && statement[index] == '/' && statement[index + 1] == '*')
+            {
+                index += 2;
+                while (index + 1 < statement.Length && !(statement[index] == '*' && statement[index + 1] == '/'))
+                {
+                    index++;
+                }
+
+                if (index + 1 < statement.Length)
+                {
+                    index += 2;
+                }
+                else
+                {
+                    index = statement.Length;
+                }
+
+                continue;
+            }
+
+            break;
         }
     }
 
