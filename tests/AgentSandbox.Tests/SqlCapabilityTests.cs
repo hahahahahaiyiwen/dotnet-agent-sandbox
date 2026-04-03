@@ -134,8 +134,11 @@ public class SqlCapabilityTests
         }
     }
 
-    [Fact]
-    public void ExecuteSql_AllowsReadOnlyWithCteSelect()
+    [Theory]
+    [InlineData("WITH cte AS (SELECT id, name FROM users) SELECT name FROM cte ORDER BY id")]
+    [InlineData("WITH cte AS MATERIALIZED (SELECT id, name FROM users) SELECT name FROM cte ORDER BY id")]
+    [InlineData("WITH cte AS NOT MATERIALIZED (SELECT id, name FROM users) SELECT name FROM cte ORDER BY id")]
+    public void ExecuteSql_AllowsReadOnlyWithCteSelect(string statement)
     {
         var dbPath = CreateDatabaseWithSampleRows();
         try
@@ -143,7 +146,7 @@ public class SqlCapabilityTests
             using var sandbox = CreateSandbox(dbPath, out _);
             var capability = sandbox.GetCapability<ISqlCapability>();
 
-            var result = capability.ExecuteSql("WITH cte AS (SELECT id, name FROM users) SELECT name FROM cte ORDER BY id");
+            var result = capability.ExecuteSql(statement);
 
             Assert.Equal(2, result.Rows.Count);
             Assert.Equal("Ada", result.Rows[0]["name"]);

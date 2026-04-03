@@ -454,6 +454,12 @@ public sealed class SqlSandboxCapability : ISandboxCapability, ISqlCapability, I
             }
 
             SkipTrivia(statement, ref index);
+            if (!TryConsumeOptionalCteMaterializationModifier(statement, ref index))
+            {
+                return false;
+            }
+
+            SkipTrivia(statement, ref index);
             if (index >= statement.Length || statement[index] != '(' || !TryConsumeParenthesized(statement, ref index))
             {
                 return false;
@@ -469,6 +475,18 @@ public sealed class SqlSandboxCapability : ISandboxCapability, ISqlCapability, I
 
             return consumedAnyCte;
         }
+    }
+
+    private static bool TryConsumeOptionalCteMaterializationModifier(string statement, ref int index)
+    {
+        if (TryConsumeKeyword(statement, ref index, "NOT"))
+        {
+            SkipTrivia(statement, ref index);
+            return TryConsumeKeyword(statement, ref index, "MATERIALIZED");
+        }
+
+        TryConsumeKeyword(statement, ref index, "MATERIALIZED");
+        return true;
     }
 
     private static bool TryConsumeIdentifier(string statement, ref int index)
