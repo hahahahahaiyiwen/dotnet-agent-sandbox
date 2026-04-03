@@ -10,7 +10,8 @@ Client-side agents (Cursor, Claude Code, Copilot) leverage the user's machine—
 
 This project provides what's missing: **an in-memory sandbox where agents can read, write, execute, and iterate**—just like they would on a local machine, but entirely server-side.
 
-📖 Read the full discussion: [Why Server-Side AI Agents Are Lagging Behind—And What We Need to Fix It](https://github.com/hahahahahaiyiwen/agent-sandbox/discussions/12)
+📖 Thoughts: [Why Server-Side AI Agents Are Lagging Behind—And What We Need to Fix It](https://github.com/hahahahahaiyiwen/agent-sandbox/discussions/12)
+📚 Wiki documentation: [AgentSandbox Wiki](https://github.com/hahahahahaiyiwen/agent-sandbox/wiki)
 
 ## Features
 
