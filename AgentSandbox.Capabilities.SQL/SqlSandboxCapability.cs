@@ -649,7 +649,14 @@ public sealed class SqlSandboxCapability : ISandboxCapability, ISqlCapability, I
             {
                 if (c == ']')
                 {
-                    inBracketQuote = false;
+                    if (next == ']')
+                    {
+                        index++;
+                    }
+                    else
+                    {
+                        inBracketQuote = false;
+                    }
                 }
                 continue;
             }

@@ -138,6 +138,7 @@ public class SqlCapabilityTests
     [InlineData("WITH cte AS (SELECT id, name FROM users) SELECT name FROM cte ORDER BY id")]
     [InlineData("WITH cte AS MATERIALIZED (SELECT id, name FROM users) SELECT name FROM cte ORDER BY id")]
     [InlineData("WITH cte AS NOT MATERIALIZED (SELECT id, name FROM users) SELECT name FROM cte ORDER BY id")]
+    [InlineData("WITH RECURSIVE cte AS (SELECT id, name FROM users) SELECT name FROM cte ORDER BY id")]
     public void ExecuteSql_AllowsReadOnlyWithCteSelect(string statement)
     {
         var dbPath = CreateDatabaseWithSampleRows();
