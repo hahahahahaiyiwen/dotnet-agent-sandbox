@@ -112,6 +112,53 @@ public class SqlCapabilityTests
         }
     }
 
+    [Theory]
+    [InlineData("WITH target AS (SELECT id FROM users WHERE name = 'Linus') DELETE FROM users WHERE id IN (SELECT id FROM target)")]
+    [InlineData("WITH target AS (SELECT id FROM users WHERE name = 'Ada') UPDATE users SET name = 'Ada2' WHERE id IN (SELECT id FROM target)")]
+    [InlineData("WITH payload(name) AS (SELECT 'Mallory') INSERT INTO users(name) SELECT name FROM payload")]
+    public void ExecuteSql_BlocksWritableWithCteStatements_WithAuthDenied(string statement)
+    {
+        var dbPath = CreateDatabaseWithSampleRows();
+        try
+        {
+            using var sandbox = CreateSandbox(dbPath, out _);
+            var capability = sandbox.GetCapability<ISqlCapability>();
+
+            var ex = Assert.Throws<SqlCapabilityException>(() => capability.ExecuteSql(statement));
+
+            Assert.Equal(SqlCapabilityErrorCodes.AuthDenied, ex.ErrorCode);
+        }
+        finally
+        {
+            File.Delete(dbPath);
+        }
+    }
+
+    [Theory]
+    [InlineData("WITH cte AS (SELECT id, name FROM users) SELECT name FROM cte ORDER BY id")]
+    [InlineData("WITH cte AS MATERIALIZED (SELECT id, name FROM users) SELECT name FROM cte ORDER BY id")]
+    [InlineData("WITH cte AS NOT MATERIALIZED (SELECT id, name FROM users) SELECT name FROM cte ORDER BY id")]
+    [InlineData("WITH RECURSIVE cte AS (SELECT id, name FROM users) SELECT name FROM cte ORDER BY id")]
+    public void ExecuteSql_AllowsReadOnlyWithCteSelect(string statement)
+    {
+        var dbPath = CreateDatabaseWithSampleRows();
+        try
+        {
+            using var sandbox = CreateSandbox(dbPath, out _);
+            var capability = sandbox.GetCapability<ISqlCapability>();
+
+            var result = capability.ExecuteSql(statement);
+
+            Assert.Equal(2, result.Rows.Count);
+            Assert.Equal("Ada", result.Rows[0]["name"]);
+            Assert.Equal("Linus", result.Rows[1]["name"]);
+        }
+        finally
+        {
+            File.Delete(dbPath);
+        }
+    }
+
     [Fact]
     public void ExecuteSql_EnforcesResponseByteLimit()
     {

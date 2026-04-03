@@ -42,7 +42,7 @@ var capability = new SqlSandboxCapability(new SqlCapabilityOptions
 
 ## Read-only policy
 
-- Allowed statement categories: `SELECT`, `WITH`, read `EXPLAIN`, read `PRAGMA`
+- Allowed statement categories: `SELECT`, read-only `WITH ... SELECT` (including `AS MATERIALIZED` / `AS NOT MATERIALIZED` CTE modifiers), read `EXPLAIN`, read `PRAGMA`
 - Blocked categories: DML/DDL and transaction control statements
 - Multi-statement execution is blocked
 
